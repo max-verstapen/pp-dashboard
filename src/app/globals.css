@@ -1,0 +1,410 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* Local pixel font: Pixellari */
+@font-face {
+  font-family: "Pixellari";
+  src: url("/fonts/Pixellari.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* Prefer Pixellari for all 'font-sans' usages */
+  --font-sans: "Pixellari", var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  font-family: "Pixellari", Arial, Helvetica, sans-serif;
+  /* Fallback page color */
+  background-color: var(--background);
+  /* Site-wide background image with black transparent overlay */
+  background-image: linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url('/background.gif');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* Skeleton helpers */
+.panel {
+  background: rgba(10, 10, 10, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.pixel-button {
+  padding: 12px 18px;
+  color: #0a0a0a;
+  background: #8dfcc7;
+  border: 2px solid #1a1a1a;
+  border-radius: 8px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+}
+.pixel-button:hover {
+  filter: brightness(0.95);
+}
+
+.card {
+  transition: transform 150ms ease;
+  will-change: transform;
+}
+.card:hover {
+  transform: translateY(-4px);
+}
+
+/* Staggered "riffle" style shuffle animation */
+@keyframes card-riffle {
+  0%   { transform: translateY(0) rotate(0) scale(1); opacity: 1; }
+  25%  { transform: translateY(-12px) rotate(var(--tilt, 0deg)) scale(1.06); opacity: 0.95; }
+  60%  { transform: translateY(2px) rotate(calc(var(--tilt, 0deg) * -0.3)) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0) rotate(0) scale(1); opacity: 1; }
+}
+
+.shuffle-anim .card {
+  animation: card-riffle 0.4s ease-in-out both;
+}
+.shuffle-anim .card:nth-child(odd) { --tilt: -3deg; }
+.shuffle-anim .card:nth-child(even) { --tilt: 3deg; }
+.shuffle-anim .card:nth-child(1) { animation-delay: 0ms; }
+.shuffle-anim .card:nth-child(2) { animation-delay: 20ms; }
+.shuffle-anim .card:nth-child(3) { animation-delay: 40ms; }
+.shuffle-anim .card:nth-child(4) { animation-delay: 60ms; }
+.shuffle-anim .card:nth-child(5) { animation-delay: 80ms; }
+.shuffle-anim .card:nth-child(6) { animation-delay: 100ms; }
+
+/* Reusable pixel button using panel assets */
+.pixel-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  height: 46px;
+  color: #1a1a1a;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+  font-family: "Pixellari", Arial, Helvetica, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border: none;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  transition: transform 120ms ease, filter 120ms ease;
+  user-select: none;
+}
+.pixel-btn:active:not([disabled]) {
+  transform: translateY(1px);
+}
+.pixel-btn[disabled] {
+  cursor: not-allowed;
+  filter: grayscale(10%);
+}
+
+/* Sizes */
+.pixel-btn[data-size="sm"] { height: 38px; padding: 6px 14px; }
+.pixel-btn[data-size="md"] { height: 46px; padding: 10px 18px; }
+.pixel-btn[data-size="lg"] { height: 56px; padding: 12px 24px; font-size: 1.125rem; }
+
+/* Variant: HighResPanels - window_theme_green */
+.pixel-btn[data-variant="green"] {
+  --btn-default: url('/assets/HighResPanels/window_theme_green/button_default.png');
+  --btn-hovered: url('/assets/HighResPanels/window_theme_green/button_hovered.png');
+  --btn-pressed: url('/assets/HighResPanels/window_theme_green/button_pressed.png');
+  --btn-disabled: url('/assets/HighResPanels/window_theme_green/button_disabled.png');
+  background-image: var(--btn-default);
+}
+.pixel-btn[data-variant="green"]:hover:not([disabled]) {
+  background-image: var(--btn-hovered);
+}
+.pixel-btn[data-variant="green"]:active:not([disabled]) {
+  background-image: var(--btn-pressed);
+}
+.pixel-btn[data-variant="green"][disabled] {
+  background-image: var(--btn-disabled);
+}
+
+/* Variant: LowResPanels tab style (optional) */
+.pixel-btn[data-variant="tab"] {
+  --btn-default: url('/assets/LowResPanels With Buttons/tab_active.png');
+  --btn-hovered: url('/assets/LowResPanels With Buttons/tab_active_hovered.png');
+  --btn-pressed: url('/assets/LowResPanels With Buttons/tab_active.png');
+  --btn-disabled: url('/assets/LowResPanels With Buttons/tab_inactive.png');
+  background-image: var(--btn-default);
+}
+.pixel-btn[data-variant="tab"]:hover:not([disabled]) {
+  background-image: var(--btn-hovered);
+}
+.pixel-btn[data-variant="tab"]:active:not([disabled]) {
+  background-image: var(--btn-pressed);
+}
+.pixel-btn[data-variant="tab"][disabled] {
+  background-image: var(--btn-disabled);
+}
+
+/* ========= Right Panel: Green Window + Tabs (skeleton) ========= */
+.pixel-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-image: url('/assets/HighResPanels/window_theme_green/window.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  padding: 8px; /* outer frame inset */
+}
+.pixel-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px 6px 0 6px;
+  /* let tabs overflow horizontally on small screens */
+  overflow-x: auto;
+}
+.pixel-tab {
+  position: relative;
+  height: 44px;
+  min-width: 120px;
+  padding: 0 16px;
+  border: 0;
+  cursor: pointer;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  color: #0b0f06;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+  font-family: "Pixellari", Arial, Helvetica, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition: transform 120ms ease;
+}
+.pixel-tab:hover {
+  transform: translateY(1px);
+  background-image: url('/assets/LowResPanels With Buttons/tab_active_hovered.png');
+}
+.pixel-tab[data-state="active"] {
+  background-image: url('/assets/LowResPanels With Buttons/tab_active.png');
+}
+.pixel-tab[data-state="active"] .pixel-tab__label {
+  color: #ffffff;
+}
+.pixel-tab[data-state="inactive"] {
+  background-image: url('/assets/LowResPanels With Buttons/tab_inactive.png');
+  filter: none;
+}
+.pixel-tab__label {
+  display: inline-block;
+  padding-top: 2px;
+}
+.pixel-window__inner {
+  flex: 1;
+  margin: 11px;
+  background-image: url('/assets/HighResPanels/window_theme_green/panel_focused.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  overflow: hidden;
+}
+
+/* ---- Chip: small PP balance using subpanel asset ---- */
+.pixel-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  height: 34px;
+  padding: 0 12px;
+  background-image: url('/assets/LowResPanels With Buttons/subpanel_focused.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  color: #d9f99d;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.6);
+  font-weight: 800;
+  text-decoration: none;
+}
+.pixel-chip__text {
+  transform: translateY(-1px);
+}
+
+/* Entry-style chip using LowResPanels combo_box_entry, scaled via 9-slice */
+.pixel-chip--entry {
+  background-image: url('/assets/LowResPanels With Buttons/combo_box_entry.png');
+  background-repeat: no-repeat;
+  background-size: 100% 100%; /* use image as-is, scale uniformly with the chip */
+  color: #e5e7eb;
+  border: none;
+  image-rendering: pixelated;
+  padding: 0 12px;
+  min-height: 34px;
+}
+
+/* Compact icon-only chip (for small close buttons) */
+.pixel-chip--icon {
+  padding: 2px 6px;
+  min-width: unset;
+  height: 28px;
+}
+.pixel-chip--icon .pixel-chip__text {
+  display: none;
+}
+
+/* ---- Leaderboard table skeleton ---- */
+.lb-header-row {
+  display: grid;
+  grid-template-columns: 1fr 3fr 2fr;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+  color: #ffffff;
+  font-weight: 900;
+  border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+.lb-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 1fr 3fr 2fr;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px dashed rgba(255,255,255,0.06);
+}
+.lb-row:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.06);
+}
+.lb-rank { color: #a3e635; font-weight: 800; }
+.lb-name { color: #e5e7eb; }
+.lb-pp { color: #bef264; font-weight: 800; text-align: left; }
+
+/* ---- Daily tasks ---- */
+.tasks-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.tasks-section__title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+}
+.task-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px dashed rgba(255,255,255,0.08);
+}
+.task-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.task-icon {
+  image-rendering: pixelated;
+}
+.pixel-icon {
+  image-rendering: pixelated;
+}
+.task-title {
+  font-weight: 800;
+}
+.task-reward {
+  color: #a3e635;
+  font-weight: 900;
+}
+.task-notes {
+  margin-top: 8px;
+  opacity: 0.75;
+  font-size: 0.85rem;
+  line-height: 1.25rem;
+}
+
+/* Checkbox built from tab asset with check overlay */
+.task-checkbox {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  background-image: url('/assets/LowResPanels With Buttons/tab_active_hovered.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.task-checkbox__mark {
+  image-rendering: pixelated;
+}
+
+/* ---- My Stats ---- */
+.stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stats-section__title {
+  font-size: 1.125rem;
+  font-weight: 900;
+  margin-bottom: 10px;
+}
+
+/* Sprite: WalletIcons.png (8 columns, equal frames) */
+.wallet-sprite {
+  --sprite-count: 8;
+  --sprite-index: 0; /* set per-instance inline */
+  width: 26px;
+  height: 26px;
+  background-image: url('/assets/WalletIcons.png');
+  background-repeat: no-repeat;
+  background-size: calc(var(--sprite-count) * 100%) 100%;
+  background-position: calc(var(--sprite-index) * (100% / (var(--sprite-count) - 1))) 0%;
+  image-rendering: pixelated;
+}
+
+/* Fixed-size icon for stats rows (when using discrete images) */
+.stats-icon {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+}
