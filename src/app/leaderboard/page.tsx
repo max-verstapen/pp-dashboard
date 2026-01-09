@@ -90,7 +90,7 @@ export default async function LeaderboardPage({
               {errorText}
             </div>
           ) : (
-            <table className="mt-4 w-full border-collapse text-left">
+            <table className="mt-4 w-full border-separate border-spacing-y-1 text-left">
               <thead className="text-zinc-300">
                 <tr>
                   <th className="border-b border-zinc-700/60 px-3 py-2">#</th>
@@ -109,21 +109,51 @@ export default async function LeaderboardPage({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.userAddress} className="hover:bg-white/5">
-                    <td className="px-3 py-2">{item.rank}</td>
-                    <td className="px-3 py-2">
-                      {item.username || "Unknown User"}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-sm">
-                      {shortenAddress(item.userAddress)}
-                    </td>
-                    <td className="px-3 py-2 font-semibold">
-                      {item.totalPoints}
-                    </td>
-                    <td className="px-3 py-2">{item.level}</td>
-                  </tr>
-                ))}
+                {items.map((item, index) => {
+                  const topRankRowClasses =
+                    index === 0
+                      ? "bg-red-500/20 text-red-200 shadow-[0_0_18px_rgba(239,68,68,0.95)]"
+                      : index === 1
+                        ? "bg-purple-500/20 text-purple-200 shadow-[0_0_18px_rgba(168,85,247,0.95)]"
+                        : index === 2
+                          ? "bg-green-400/20 text-green-200 shadow-[0_0_18px_rgba(74,222,128,0.95)]"
+                          : "hover:bg-white/5 text-zinc-100";
+
+                  const topRankCellBorderClasses =
+                    index === 0
+                      ? "border-2 border-red-400"
+                      : index === 1
+                        ? "border-2 border-purple-400"
+                        : index === 2
+                          ? "border-2 border-green-300"
+                          : "border border-zinc-700/60";
+
+                  return (
+                    <tr key={item.userAddress} className={topRankRowClasses}>
+                      <td
+                        className={`px-3 py-2 font-bold ${topRankCellBorderClasses}`}
+                      >
+                        {item.rank}
+                      </td>
+                      <td className={`px-3 py-2 ${topRankCellBorderClasses}`}>
+                        {item.username || "Unknown User"}
+                      </td>
+                      <td
+                        className={`px-3 py-2 font-mono text-sm ${topRankCellBorderClasses}`}
+                      >
+                        {shortenAddress(item.userAddress)}
+                      </td>
+                      <td
+                        className={`px-3 py-2 font-semibold ${topRankCellBorderClasses}`}
+                      >
+                        {item.totalPoints}
+                      </td>
+                      <td className={`px-3 py-2 ${topRankCellBorderClasses}`}>
+                        {item.level}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

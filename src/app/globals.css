@@ -261,6 +261,12 @@ body {
   min-height: 34px;
 }
 
+/* Remove background for linked account displays */
+.pixel-chip--no-bg {
+  background-image: none;
+  background: none;
+}
+
 /* Compact icon-only chip (for small close buttons) */
 .pixel-chip--icon {
   padding: 2px 6px;

@@ -1,8 +1,10 @@
 "use client";
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import PixelButton from "../components/PixelButton";
 import RightTabsPanel from "../components/RightTabsPanel";
+import InfoBoard from "../components/InfoBoard";
+import RewardsModal from "../components/RewardsModal";
 
 export default function Home() {
   const initialCards = useMemo(
@@ -19,6 +21,23 @@ export default function Home() {
 
   const [cards, setCards] = useState<string[]>(initialCards);
   const [isShuffling, setIsShuffling] = useState(false);
+  const [showInfoBoard, setShowInfoBoard] = useState(false);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
+
+  useEffect(() => {
+    // Show InfoBoard when component mounts
+    setShowInfoBoard(true);
+  }, []);
+
+  const handleInfoBoardClose = () => {
+    setShowInfoBoard(false);
+    // Show rewards modal after info board closes
+    setShowRewardsModal(true);
+  };
+
+  const handleRewardsModalClose = () => {
+    setShowRewardsModal(false);
+  };
 
   function handleShuffle() {
     // Fisher-Yates shuffle
@@ -38,13 +57,19 @@ export default function Home() {
 
   return (
     <div className="flex min-h-[100svh] items-center justify-center font-sans">
+      {/* Info Board Modal */}
+      {showInfoBoard && <InfoBoard onClose={handleInfoBoardClose} />}
+      
+      {/* Rewards Modal */}
+      {showRewardsModal && <RewardsModal onClose={handleRewardsModalClose} />}
+
       {/* Single-frame wrapper with equal T/B and equal L/R margins.
-          Side margins are slightly smaller than top/bottom. */}
-      <main className="mx-[4vw] mt-[4svh] mb-[4svh] h-[80svh] w-[calc(100vw-8vw)]">
-        {/* Two-column frame */}
-        <div className="grid h-full w-full min-h-0 grid-cols-12 gap-4">
+          Fixed frame height; content inside scrolls rather than resizing the frame. */}
+      <main className="mx-[4vw] mt-[4svh] mb-[4svh] w-[calc(100vw-8vw)] h-[80svh]">
+        {/* Responsive frame: stack on small screens, two columns on larger screens */}
+        <div className="grid h-full w-full min-h-0 grid-cols-1 gap-4 lg:grid-cols-12">
           {/* LEFT column */}
-          <section className="col-span-7 grid min-h-0 grid-rows-[2fr_1fr] gap-4">
+          <section className="grid h-full min-h-0 grid-rows-[2fr_1fr] gap-4 lg:col-span-7">
             {/* Upper left: logo, title, bullets */}
             <div className="panel overflow-y-auto">
               <div className="flex flex-col items-start min-h-0">
@@ -127,7 +152,7 @@ export default function Home() {
           </section>
 
           {/* RIGHT column */}
-          <section className="col-span-5 min-h-0">
+          <section className="h-full min-h-0 lg:col-span-5">
             <RightTabsPanel />
           </section>
         </div>

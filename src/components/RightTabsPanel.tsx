@@ -17,7 +17,7 @@ type UserAllResponse = {
   [key: string]: any;
 };
 
-const TAB_LABELS = ["My Stats", "Game", "Daily", "Leaderboard"] as const;
+const TAB_LABELS = ["My Stats", "Game", "Daily", "Leaderboard", "Invite"] as const;
 type TabKey = (typeof TAB_LABELS)[number];
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -89,6 +89,23 @@ function shortenMiddle(value: string, keepStart = 2, keepEnd = 4): string {
   return `${start}...${end}`;
 }
 
+function cleanAccountName(name: string | null): string | null {
+  if (!name) return null;
+  // Trim whitespace
+  let cleaned = name.trim();
+  // Remove @ from start
+  while (cleaned.startsWith('@')) {
+    cleaned = cleaned.slice(1);
+  }
+  // Remove @ from end
+  while (cleaned.endsWith('@')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+  // Trim whitespace again after removing @
+  cleaned = cleaned.trim();
+  return cleaned || null;
+}
+
 export default function RightTabsPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("My Stats");
   const { address: globalWalletAddress } = useGlobalWallet();
@@ -119,6 +136,7 @@ export default function RightTabsPanel() {
   const [userExists, setUserExists] = useState<boolean | null>(null);
   const [showRestricted, setShowRestricted] = useState<boolean>(false);
   const [checkedAddress, setCheckedAddress] = useState<string | null>(null);
+  const [showCreateUserFlow, setShowCreateUserFlow] = useState<boolean>(false);
 
   // Reset state when address changes
   useEffect(() => {
@@ -170,12 +188,50 @@ export default function RightTabsPanel() {
     };
   }, [addressForApi, checkedAddress]);
 
-  // If user doesn't exist, force active tab to Leaderboard
+  // If user doesn't exist, show create user flow instead of forcing Leaderboard
   useEffect(() => {
-    if (userExists === false && activeTab !== "Leaderboard") {
-      setActiveTab("Leaderboard");
+    if (userExists === false) {
+      setShowCreateUserFlow(true);
+    } else if (userExists === true) {
+      setShowCreateUserFlow(false);
     }
-  }, [userExists, activeTab]);
+  }, [userExists]);
+
+  // Handler for successful user creation
+  const handleUserCreated = () => {
+    setUserExists(true);
+    setShowCreateUserFlow(false);
+    setActiveTab("Invite");
+    // Clear cache to force refresh
+    if (addressForApi) {
+      const cacheKey = `pp_user_exists_${addressForApi}`;
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(cacheKey);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Show create user flow if user doesn't exist
+  if (showCreateUserFlow) {
+    return (
+      <div className="pixel-window h-full w-full">
+        <div className="pixel-window__inner">
+          <CreateUserFlow 
+            walletAddress={addressForApi || ""}
+            onUserCreated={handleUserCreated}
+            onCancel={() => {
+              setShowCreateUserFlow(false);
+              setActiveTab("Leaderboard");
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pixel-window h-full w-full">
@@ -183,6 +239,8 @@ export default function RightTabsPanel() {
       <div className="pixel-tabs">
         {TAB_LABELS.map((label) => {
           const isActive = label === activeTab;
+          // Restrict all tabs except Leaderboard if user doesn't exist
+          // Invite tab is only available after user creation
           const isRestricted = userExists === false && label !== "Leaderboard";
           return (
             <button
@@ -210,6 +268,7 @@ export default function RightTabsPanel() {
         {activeTab === "Daily" && <DailyContent />}
         {activeTab === "Game" && <GameContent />}
         {activeTab === "My Stats" && <MyStatsContent />}
+        {activeTab === "Invite" && <InviteContent />}
       </div>
 
       {/* Restricted modal */}
@@ -765,9 +824,9 @@ function MyStatsContent() {
   // Don't replace existing usernames with Twitter handle
   const displayUsername =
     isConnected && usernameFromApi
-      ? `@${usernameFromApi}`
+      ? `@${cleanAccountName(usernameFromApi) || usernameFromApi}`
       : isConnected && effectiveTwitter && !usernameFromApi
-      ? `@${effectiveTwitter}`
+      ? `@${cleanAccountName(effectiveTwitter) || effectiveTwitter}`
       : "--";
 
   const displayReferrals =
@@ -840,8 +899,8 @@ function MyStatsContent() {
               <Image src="/assets/google.png" alt="Google" width={26} height={26} className="stats-icon" />
               {googleEmail ? (
                 <div className="flex items-center gap-2">
-                  <div className="pixel-chip pixel-chip--entry">
-                    <span className="pixel-chip__text">{googleEmail}</span>
+                  <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
+                    <span className="pixel-chip__text">{cleanAccountName(googleEmail)}</span>
                   </div>
                 </div>
               ) : (
@@ -862,8 +921,8 @@ function MyStatsContent() {
               <Image src="/assets/x.png" alt="X" width={26} height={26} className="stats-icon" />
               {effectiveTwitter ? (
                 <div className="flex items-center gap-2">
-                  <div className="pixel-chip pixel-chip--entry">
-                    <span className="pixel-chip__text">@{effectiveTwitter}</span>
+                  <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
+                    <span className="pixel-chip__text">@{cleanAccountName(effectiveTwitter)}</span>
                   </div>
                 </div>
               ) : (
@@ -884,8 +943,8 @@ function MyStatsContent() {
               <Image src="/assets/discord.png" alt="Discord" width={26} height={26} className="stats-icon" />
               {effectiveDiscord ? (
                 <div className="flex items-center gap-2">
-                  <div className="pixel-chip pixel-chip--entry">
-                    <span className="pixel-chip__text">{effectiveDiscord}</span>
+                  <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
+                    <span className="pixel-chip__text">{cleanAccountName(effectiveDiscord)}</span>
                   </div>
                 </div>
               ) : (
@@ -906,7 +965,7 @@ function MyStatsContent() {
               <Image src="/assets/wallet.png" alt="Wallet" width={26} height={26} className="stats-icon" />
               {addressForApi ? (
                 <div className="flex items-center gap-2">
-                  <div className="pixel-chip pixel-chip--entry">
+                  <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
                     <span className="pixel-chip__text">{shortenMiddle(addressForApi, 4, 4)}</span>
                   </div>
                 </div>
@@ -1362,6 +1421,377 @@ function DailyContent() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+type CreateUserFlowProps = {
+  walletAddress: string;
+  onUserCreated: () => void;
+  onCancel: () => void;
+};
+
+function CreateUserFlow({ walletAddress, onUserCreated, onCancel }: CreateUserFlowProps) {
+  const [step, setStep] = useState<"connect" | "username">("connect");
+  const [username, setUsername] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const { address: currentAddress, connected: globalWalletConnected } = useGlobalWallet();
+  const { connect: connectWallet, loading: walletConnectLoading } = useWeb3AuthConnect();
+
+  // Determine effective wallet address (use current connected address if available)
+  const effectiveWalletAddress = currentAddress || walletAddress;
+
+  // Check if wallet is connected and move to username step
+  useEffect(() => {
+    if (globalWalletConnected && currentAddress && step === "connect") {
+      setStep("username");
+    }
+  }, [globalWalletConnected, currentAddress, step]);
+
+  const handleConnectWallet = async () => {
+    try {
+      setError(null);
+      await connectWallet();
+    } catch (err) {
+      setError("Failed to connect wallet. Please try again.");
+      console.error("[CreateUserFlow] Wallet connection error:", err);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!username.trim()) {
+      setError("Please enter a username");
+      return;
+    }
+
+    if (!effectiveWalletAddress) {
+      setError("Please connect your wallet first");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userAddress: effectiveWalletAddress,
+          username: username.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to create user (${res.status})`);
+      }
+
+      // Clear cache to force refresh
+      const cacheKey = `pp_user_exists_${effectiveWalletAddress}`;
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(cacheKey);
+        }
+      } catch {
+        // ignore
+      }
+
+      onUserCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user. Please try again.");
+      console.error("[CreateUserFlow] User creation error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col items-center justify-center">
+      <div className="max-w-md w-full">
+        <h2 className="text-2xl md:text-3xl drop-shadow font-bold mb-6 text-center">
+          Create Your Account
+        </h2>
+
+        {step === "connect" && (
+          <div className="space-y-4">
+            <p className="opacity-90 text-center mb-6">
+              To get started, please connect your external wallet.
+            </p>
+            <div className="flex flex-col items-center gap-4">
+              {effectiveWalletAddress ? (
+                <div className="text-center">
+                  <p className="opacity-80 mb-2">Wallet connected:</p>
+                  <div className="pixel-chip pixel-chip--entry mb-4">
+                    <span className="pixel-chip__text font-mono">{shortenMiddle(effectiveWalletAddress, 6, 6)}</span>
+                  </div>
+                  <PixelButton
+                    variant="tab"
+                    size="md"
+                    onClick={() => setStep("username")}
+                  >
+                    Continue
+                  </PixelButton>
+                </div>
+              ) : (
+                <>
+                  <PixelButton
+                    variant="tab"
+                    size="md"
+                    onClick={handleConnectWallet}
+                    disabled={walletConnectLoading}
+                  >
+                    {walletConnectLoading ? "Connecting..." : "Connect Wallet"}
+                  </PixelButton>
+                  {error && (
+                    <div className="text-yellow-200/90 text-sm text-center">{error}</div>
+                  )}
+                </>
+              )}
+              <PixelButton
+                variant="tab"
+                size="sm"
+                onClick={onCancel}
+                className="mt-2"
+              >
+                Cancel
+              </PixelButton>
+            </div>
+          </div>
+        )}
+
+        {step === "username" && (
+          <div className="space-y-4">
+            <p className="opacity-90 text-center mb-4">
+              Great! Now choose a username for your account.
+            </p>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block mb-2 text-sm opacity-80">Username</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    setError(null);
+                  }}
+                  className="w-full px-3 py-2 bg-black/30 border border-zinc-600 rounded text-zinc-100 focus:outline-none focus:border-zinc-400"
+                  placeholder="Enter your username"
+                  disabled={loading}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) {
+                      handleCreateUser();
+                    }
+                  }}
+                />
+              </div>
+              {error && (
+                <div className="text-yellow-200/90 text-sm text-center">{error}</div>
+              )}
+              <div className="flex gap-3">
+                <PixelButton
+                  variant="tab"
+                  size="md"
+                  onClick={handleCreateUser}
+                  disabled={loading || !username.trim()}
+                  className="flex-1"
+                >
+                  {loading ? "Creating..." : "Create Account"}
+                </PixelButton>
+                <PixelButton
+                  variant="tab"
+                  size="md"
+                  onClick={() => setStep("connect")}
+                  disabled={loading}
+                >
+                  Back
+                </PixelButton>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ReferredUser = {
+  username?: string;
+  userAddress?: string;
+  joinedAt?: string;
+};
+
+function InviteContent() {
+  const { address: globalWalletAddress } = useGlobalWallet();
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const address = globalWalletAddress;
+    if (!address) {
+      setLoading(false);
+      return;
+    }
+
+    async function loadInviteData() {
+      try {
+        // Check cache first
+        const cacheKey = `pp_tab_cache_invite_${address}`;
+        const cached = getCachedJson<{ referralCode: string; referredUsers: ReferredUser[] }>(cacheKey);
+        if (cached) {
+          if (!cancelled) {
+            setReferralCode(cached.referralCode);
+            setReferredUsers(cached.referredUsers || []);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Fetch user data to get referral code
+        const resUser = await fetch(`/api/user/${encodeURIComponent(address)}/all`, { cache: "no-store" });
+        if (!resUser.ok) {
+          throw new Error("Failed to load user data");
+        }
+
+        const data = await resUser.json();
+        // Try to get referral code from API, fallback to address
+        const code =
+          data?.referralCode ||
+          data?.raw?.user?.referralCode ||
+          data?.raw?.all?.referralCode ||
+          address;
+
+        // Fetch referred users from dedicated endpoint
+        let users: ReferredUser[] = [];
+        try {
+          const resRef = await fetch(
+            `/api/user/${encodeURIComponent(address)}/referred-users`,
+            { cache: "no-store" }
+          );
+          if (resRef.ok) {
+            const refData = await resRef.json();
+            if (Array.isArray(refData?.referredUsers)) {
+              users = refData.referredUsers as ReferredUser[];
+            } else if (Array.isArray(refData?.referredUserAddresses)) {
+              users = (refData.referredUserAddresses as string[]).map((addr) => ({
+                userAddress: addr,
+              }));
+            }
+          }
+        } catch {
+          // ignore; we'll just show an empty list
+          users = [];
+        }
+
+        if (!cancelled) {
+          setReferralCode(code);
+          setReferredUsers(users);
+          setCachedJson(cacheKey, { referralCode: code, referredUsers: users });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load invite data");
+          // Fallback: use address as referral code
+          setReferralCode(address);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadInviteData();
+    return () => {
+      cancelled = true;
+    };
+  }, [globalWalletAddress]);
+
+  const handleCopyCode = () => {
+    if (referralCode && typeof window !== "undefined") {
+      navigator.clipboard.writeText(referralCode).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement("textarea");
+        textArea.value = referralCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      });
+    }
+  };
+
+  const displayCode = referralCode ? shortenMiddle(referralCode, 6, 6) : "--";
+
+  return (
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col">
+      <h2 className="text-2xl md:text-3xl drop-shadow font-bold mb-4">Invite</h2>
+
+      {loading && (
+        <div className="flex-1 flex items-center justify-center opacity-80">
+          Loading invite data...
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 text-yellow-200/90 text-sm">{error}</div>
+      )}
+
+      {!loading && (
+        <div className="flex flex-col gap-6">
+          {/* Referral Code Section */}
+          <div className="stats-section">
+            <div className="stats-section__title mb-3">Your Referral Code</div>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 px-3 py-2 bg-black/30 border border-zinc-600 rounded text-zinc-100 text-sm">
+                {displayCode}
+              </div>
+              <PixelButton
+                variant="tab"
+                size="sm"
+                onClick={handleCopyCode}
+                disabled={!referralCode}
+              >
+                Copy
+              </PixelButton>
+            </div>
+            <p className="mt-2 text-sm opacity-80">
+              Share this code with your friends to earn referral rewards!
+            </p>
+          </div>
+
+          {/* Referred Users Section */}
+          <div className="stats-section">
+            <div className="stats-section__title mb-3">
+              Referred Users ({referredUsers.length})
+            </div>
+            {referredUsers.length === 0 ? (
+              <div className="opacity-80 text-sm">
+                No users have been referred yet. Share your code to get started!
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {referredUsers.map((user, idx) => (
+                  <div key={idx} className="py-2 border-y border-zinc-700/70 flex items-center gap-3">
+                    <div className="w-6 text-sm opacity-80 text-right">{idx + 1}.</div>
+                    <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg flex-1">
+                      <span className="pixel-chip__text">
+                        {user.username || shortenMiddle(user.userAddress || "--", 4, 4)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
