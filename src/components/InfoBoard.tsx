@@ -13,16 +13,12 @@ export default function InfoBoard({ onClose }: InfoBoardProps) {
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-8 h-8 flex items-center justify-center hover:opacity-80 transition-opacity"
+          className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center hover:opacity-80 transition-opacity p-2"
           aria-label="Close"
         >
-          <Image
-            src="/assets/x.png"
-            alt="Close"
-            width={32}
-            height={32}
-            className="pixel-icon"
-          />
+          <span className="text-[#dc2626] font-bold text-xl leading-none">
+            X
+          </span>
         </button>
 
         {/* Inner content panel */}
