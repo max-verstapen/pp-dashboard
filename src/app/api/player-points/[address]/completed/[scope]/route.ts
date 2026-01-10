@@ -44,6 +44,14 @@ export async function GET(
   const url = `${base}/player-points/${encodeURIComponent(address)}/completed/${encodeURIComponent(upstreamScope)}`;
 
   try {
+    console.log(`[API] GET /api/player-points/[address]/completed/[scope]`, {
+      address: address.substring(0, 10) + "...",
+      scope: upstreamScope,
+      url: url,
+      hasApiKey: !!apiKey,
+      baseUrl: base,
+    });
+
     const res = await fetch(url, {
       method: "GET",
       headers: {
@@ -55,17 +63,60 @@ export async function GET(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      let parsedError: any = null;
+      try {
+        parsedError = JSON.parse(text);
+      } catch {
+        // Not JSON, use text as-is
+      }
+
+      console.error(`[API] Upstream error for completed tasks`, {
+        status: res.status,
+        statusText: res.statusText,
+        url: url,
+        address: address.substring(0, 10) + "...",
+        scope: upstreamScope,
+        responseText: text.substring(0, 500), // First 500 chars
+        parsedError: parsedError,
+        headers: Object.fromEntries(res.headers.entries()),
+      });
+
       return NextResponse.json(
-        { error: `Upstream error ${res.status}`, details: text },
+        { 
+          error: `Upstream error ${res.status}`, 
+          details: parsedError || text,
+          statusText: res.statusText,
+          url: url,
+        },
         { status: 502 }
       );
     }
 
     const json = await res.json();
+    console.log(`[API] Successfully fetched completed tasks`, {
+      address: address.substring(0, 10) + "...",
+      scope: upstreamScope,
+      taskCount: Array.isArray(json?.completed) ? json.completed.length : 0,
+    });
     return NextResponse.json(json, { status: 200 });
   } catch (e: any) {
+    console.error(`[API] Exception fetching completed tasks`, {
+      error: e?.message ?? String(e),
+      stack: e?.stack,
+      url: url,
+      address: address.substring(0, 10) + "...",
+      scope: upstreamScope,
+      errorName: e?.name,
+      errorCause: e?.cause,
+    });
+
     return NextResponse.json(
-      { error: "Failed to fetch completed tasks", details: e?.message ?? String(e) },
+      { 
+        error: "Failed to fetch completed tasks", 
+        details: e?.message ?? String(e),
+        errorType: e?.name,
+        url: url,
+      },
       { status: 502 }
     );
   }

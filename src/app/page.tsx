@@ -9,12 +9,14 @@ import RewardsModal from "../components/RewardsModal";
 export default function Home() {
   const initialCards = useMemo(
     () => [
+      "/assets/cards/card2.gif",
       "/assets/cards/card1.gif",
       "/assets/cards/card7.gif",
       "/assets/cards/card3.gif",
       "/assets/cards/card4.gif",
       "/assets/cards/card5.gif",
       "/assets/cards/card6.gif",
+      "/assets/cards/card2.gif",
     ],
     []
   );

@@ -27,7 +27,7 @@ type UserAllResponse = {
   [key: string]: any;
 };
 
-const TAB_LABELS = ["My Stats", "Game", "Daily", "Leaderboard", "Invite"] as const;
+const TAB_LABELS = ["My Stats", "Game", "Bounties", "Leaderboard", "Invite"] as const;
 type TabKey = (typeof TAB_LABELS)[number];
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -278,7 +278,7 @@ export default function RightTabsPanel() {
       {/* Inner content panel */}
       <div className="pixel-window__inner">
         {activeTab === "Leaderboard" && <LeaderboardContent />}
-        {activeTab === "Daily" && <DailyContent />}
+        {activeTab === "Bounties" && <DailyContent />}
         {activeTab === "Game" && <GameContent />}
         {activeTab === "My Stats" && <MyStatsContent />}
         {activeTab === "Invite" && <InviteContent />}
@@ -929,8 +929,20 @@ function MyStatsContent() {
   const apiLinkedDiscordHandle = apiUser?.raw?.all?.discordHandle || apiUser?.raw?.all?.['discord-handle'] || apiUser?.discordHandle || null;
   
   // Use API-linked handles if available, otherwise fall back to session handles
+  // IMPORTANT: For X/Twitter, only show the actual X handle, never show Google email
   const displayEmail = apiLinkedEmail || googleEmail || null;
-  const displayXHandle = apiLinkedXHandle || effectiveTwitter || null;
+  // Ensure X handle is actually a Twitter handle (starts with @ or is a valid handle), not an email
+  const isValidTwitterHandle = (handle: string | null) => {
+    if (!handle) return false;
+    const cleaned = handle.trim();
+    // Twitter handles don't contain @ in the middle and are not email addresses
+    return cleaned.includes('@') ? cleaned.indexOf('@') === 0 && cleaned.length > 1 : /^[A-Za-z0-9_]+$/.test(cleaned);
+  };
+  const displayXHandle = (apiLinkedXHandle && isValidTwitterHandle(apiLinkedXHandle))
+    ? apiLinkedXHandle
+    : (effectiveTwitter && isValidTwitterHandle(effectiveTwitter))
+    ? effectiveTwitter
+    : null;
   const displayDiscordHandle = apiLinkedDiscordHandle || effectiveDiscord || null;
   
   // Check if handles are linked in API (regardless of session)
@@ -976,9 +988,11 @@ function MyStatsContent() {
       ? `@${cleanAccountName(effectiveTwitter) || effectiveTwitter}`
       : "--";
 
+  // Use the actual referral count from API, but also fallback to referredUsers length if available
+  const actualReferralCount = apiUser?.referralCount ?? null;
   const displayReferrals =
-    isConnected && (apiUser?.referralCount ?? null) !== null && (apiUser?.referralCount ?? undefined) !== undefined
-      ? String(apiUser?.referralCount)
+    isConnected && actualReferralCount !== null && actualReferralCount !== undefined
+      ? String(actualReferralCount)
       : "--";
 
   const displayPP =
@@ -1152,6 +1166,8 @@ function MyStatsContent() {
                           console.error("[MyStats] Error linking X handle:", error);
                         }
                       }}
+                      style={{ cursor: "pointer" }}
+                      title="Link your X/Twitter account"
                     >
                       <span className="pixel-chip__text">Link</span>
                     </button>
@@ -1165,6 +1181,8 @@ function MyStatsContent() {
                     storeWalletBeforeLink();
                     signIn("twitter", { callbackUrl: "/" });
                   }}
+                  style={{ cursor: "pointer" }}
+                  title="Link your X/Twitter account"
                 >
                   <span className="pixel-chip__text">Link</span>
                 </button>
@@ -1210,6 +1228,8 @@ function MyStatsContent() {
                           console.error("[MyStats] Error linking Discord handle:", error);
                         }
                       }}
+                      style={{ cursor: "pointer" }}
+                      title="Link your Discord account"
                     >
                       <span className="pixel-chip__text">Link</span>
                     </button>
@@ -1223,6 +1243,8 @@ function MyStatsContent() {
                     storeWalletBeforeLink();
                     signIn("discord", { callbackUrl: "/" });
                   }}
+                  style={{ cursor: "pointer" }}
+                  title="Link your Discord account"
                 >
                   <span className="pixel-chip__text">Link</span>
                 </button>
@@ -1236,6 +1258,15 @@ function MyStatsContent() {
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
                     <span className="pixel-chip__text">{shortenMiddle(addressForApi, 4, 4)}</span>
                   </div>
+                  <button
+                    type="button"
+                    className="pixel-chip pixel-chip--entry"
+                    onClick={handleUnifiedDisconnect}
+                    style={{ cursor: "pointer" }}
+                    title="Disconnect wallet"
+                  >
+                    <span className="pixel-chip__text">Disconnect</span>
+                  </button>
                 </div>
               ) : (
                 <button
@@ -1270,7 +1301,8 @@ type GameTask = {
 
 function GameContent() {
   const currentPP = 4200;
-  const walletAddress = useMemo(() => null as string | null, []);
+  const { address: globalWalletAddress } = useGlobalWallet();
+  const walletAddress = useMemo(() => globalWalletAddress || null, [globalWalletAddress]);
 
   const [tasks, setTasks] = useState<GameTask[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -1317,14 +1349,15 @@ function GameContent() {
         if ((err as any)?.name === "AbortError") return;
         setError("Unable to load tasks. Showing placeholders.");
         // Fallback placeholders keep UI functional until API is wired
+        // Using backend task ID constants with updated PP values
         const fallbackTasks: GameTask[] = [
-          { id: "fw", title: "Complete 'Firmware Update'", rewardPP: 10, done: true },
-          { id: "travel", title: "Complete 'Gotta Go Places'", rewardPP: 20, done: false },
-          { id: "ramen", title: "Complete 'Ramen Rush'", rewardPP: 15, done: false },
-          { id: "mead", title: "Complete 'Honey Mead'", rewardPP: 75, done: false },
-          { id: "fractured", title: "Complete 'Fractured Realms'", rewardPP: 100, done: false },
-          { id: "solana", title: "Open a Solana Lootbox", rewardPP: 100, done: false },
-          { id: "honeycub", title: "Open a Honeycub Lootbox", rewardPP: 125, done: false },
+          { id: "FIRMWARE_UPDATE", title: "Complete 'Firmware Update'", rewardPP: 20, done: false },
+          { id: "GOTTA_GO_PLACES", title: "Complete 'Gotta Go Places'", rewardPP: 40, done: false },
+          { id: "RAMEN_RUSH", title: "Complete 'Ramen Rush'", rewardPP: 30, done: false },
+          { id: "HONEY_MEAD", title: "Complete 'Honey Mead'", rewardPP: 150, done: false },
+          { id: "FRACTURED_REALMS", title: "Complete 'Fractured Realms'", rewardPP: 200, done: false },
+          { id: "SOLANA_LOOTBOX", title: "Open a Solana Lootbox", rewardPP: 300, done: false },
+          { id: "HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", rewardPP: 250, done: false },
         ];
         setTasks(fallbackTasks);
         // Cache fallback tasks too
@@ -1590,20 +1623,37 @@ function LeaderboardContent() {
 
 function DailyContent() {
   const currentPP = 4200;
-  const walletAddress = useMemo(() => null as string | null, []);
+  const { address: globalWalletAddress } = useGlobalWallet();
+  const walletAddress = useMemo(() => globalWalletAddress || null, [globalWalletAddress]);
   const [dailyLoading, setDailyLoading] = useState<boolean>(false);
+  const [weeklyLoading, setWeeklyLoading] = useState<boolean>(false);
+  const [socialLoading, setSocialLoading] = useState<boolean>(false);
 
-  const socialTasks = [
-    { done: true, title: "Refer a friend", reward: 50 },
-    { done: false, title: "Follow @bakelandxyz on X", reward: 25 },
-    { done: false, title: "Post a Gameplay Clip on X", reward: 150 },
-  ];
+  type SocialTask = { id?: string; title: string; reward: number; done: boolean; canVerify?: boolean; xHandle?: string | null };
+  const [socialTasks, setSocialTasks] = useState<SocialTask[]>([
+    { id: "REFER_FRIEND", title: "Refer a friend", reward: 50, done: false },
+    { id: "FOLLOW_BAKELAND_X", title: "Follow @bakelandxyz on X", reward: 25, done: false, canVerify: false },
+    { id: "POST_GAMEPLAY_X", title: "Post a Gameplay Clip on X", reward: 150, done: false, canVerify: false },
+  ]);
   type DailyTask = { id: string; title: string; reward: number; done: boolean };
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([
-    { id: "harvest_carrots_50", title: "Harvest x50 Carrots", reward: 25, done: false },
-    { id: "harvest_cabbage_25", title: "Harvest x25 Cabbages", reward: 25, done: false },
-    { id: "deliver_ramen_100", title: "Deliver x100 Ramen Bowls", reward: 75, done: false },
-    { id: "harvest_mugwort_50", title: "Harvest x50 Mugwort", reward: 50, done: false },
+    { id: "HARVEST_50_CARROTS", title: "Harvest x50 Carrots", reward: 50, done: false },
+    { id: "HARVEST_25_CABBAGES", title: "Harvest x25 Cabbages", reward: 50, done: false },
+    { id: "DELIVER_100_RAMEN", title: "Deliver x100 Ramen Bowls", reward: 150, done: false },
+    { id: "OPEN_SOLANA_LOOTBOX", title: "Open a Solana Lootbox", reward: 200, done: false },
+    { id: "OPEN_HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", reward: 250, done: false },
+  ]);
+  
+  type WeeklyTask = { id: string; title: string; reward: number; done: boolean };
+  const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTask[]>([
+    { id: "DELIVER_250_RAMEN", title: "Deliver 250 Ramen Bowls", reward: 250, done: false },
+    { id: "DELIVER_500_RAMEN", title: "Deliver 500 Ramen Bowls", reward: 400, done: false },
+    { id: "HARVEST_100_CARROTS", title: "Harvest 100 Carrots", reward: 100, done: false },
+    { id: "HARVEST_50_MUGWORT", title: "Harvest 50 Mugwort", reward: 150, done: false },
+    { id: "HARVEST_50_CABBAGES", title: "Harvest 50 Cabbages", reward: 200, done: false },
+    { id: "HARVEST_50_PUMPKINS", title: "Harvest 50 Pumpkins", reward: 250, done: false },
+    { id: "HARVEST_50_POTATOES", title: "Harvest 50 Potatoes", reward: 250, done: false },
+    { id: "COMPLETE_FRACTURED_REALMS", title: "Complete Fractured Realms", reward: 200, done: false },
   ]);
 
   useEffect(() => {
@@ -1679,22 +1729,266 @@ function DailyContent() {
     };
   }, [walletAddress]);
 
+  // Load completed weekly tasks
+  useEffect(() => {
+    let abort = false;
+    if (!walletAddress) {
+      // Reset to defaults (not completed)
+      setWeeklyTasks((prev) => prev.map((t) => ({ ...t, done: false })));
+      setWeeklyLoading(false);
+      return;
+    }
+    async function loadCompletedWeekly() {
+      // Guard against null address inside the function
+      if (!walletAddress) return;
+      
+      // Check cache first
+      const cacheKey = `pp_tab_cache_weekly_completed_${walletAddress}`;
+      const cached = getCachedJson<{ idSet: string[]; titleSet: string[] }>(cacheKey);
+      if (cached && cached.idSet && cached.titleSet) {
+        const idSet = new Set(cached.idSet);
+        const titleSet = new Set(cached.titleSet);
+        setWeeklyTasks((prev) =>
+          prev.map((t) => {
+            const isDoneById = idSet.has(t.id);
+            const isDoneByTitle = titleSet.has(t.title.toLowerCase());
+            return { ...t, done: isDoneById || isDoneByTitle || t.done };
+          })
+        );
+        setWeeklyLoading(false);
+        return;
+      }
+      
+      setWeeklyLoading(true);
+      try {
+        const res = await fetch(`/api/player-points/${encodeURIComponent(walletAddress)}/completed/weekly`, { cache: "no-store" });
+        if (!res.ok) {
+          if (!abort) setWeeklyLoading(false);
+          return;
+        }
+        const data = await res.json();
+        const completed: Array<{ taskId?: string; metadata?: any }> = Array.isArray(data?.completed) ? data.completed : [];
+        const idSet = new Set<string>();
+        const titleSet = new Set<string>(
+          completed
+            .map((c) => String(c?.metadata?.title ?? c?.metadata?.name ?? "").toLowerCase())
+            .filter((s) => !!s)
+        );
+        for (const c of completed) {
+          const id = String(c?.taskId ?? "").trim();
+          if (id) idSet.add(id);
+        }
+        if (abort) return;
+        // Cache the completed sets
+        setCachedJson(cacheKey, {
+          idSet: Array.from(idSet),
+          titleSet: Array.from(titleSet),
+        });
+        setWeeklyTasks((prev) =>
+          prev.map((t) => {
+            const isDoneById = idSet.has(t.id);
+            const isDoneByTitle = titleSet.has(t.title.toLowerCase());
+            return { ...t, done: isDoneById || isDoneByTitle || t.done };
+          })
+        );
+      } catch {
+        // ignore
+      } finally {
+        if (!abort) setWeeklyLoading(false);
+      }
+    }
+    loadCompletedWeekly();
+    return () => {
+      abort = true;
+    };
+  }, [walletAddress]);
+
+  // Load social task status
+  useEffect(() => {
+    let abort = false;
+    if (!walletAddress) {
+      setSocialTasks((prev) => prev.map((t) => ({ ...t, done: false, canVerify: false })));
+      setSocialLoading(false);
+      return;
+    }
+
+    async function loadSocialTasks() {
+      if (!walletAddress) return;
+
+      // Check cache first
+      const cacheKey = `pp_tab_cache_social_tasks_${walletAddress}`;
+      const cached = getCachedJson<{ tasks: SocialTask[] }>(cacheKey);
+      if (cached && cached.tasks) {
+        setSocialTasks(cached.tasks);
+        setSocialLoading(false);
+        return;
+      }
+
+      setSocialLoading(true);
+      try {
+        const res = await fetch(`/api/social/twitter/tasks/status?address=${encodeURIComponent(walletAddress)}`, { 
+          cache: "no-store" 
+        });
+        
+        if (!res.ok) {
+          // If API fails, keep default tasks but mark as not verifiable
+          setSocialTasks((prev) => prev.map((t) => ({ ...t, canVerify: false })));
+          setSocialLoading(false);
+          return;
+        }
+
+        const data = await res.json();
+        const tasks = data?.tasks || [];
+        
+        // Merge with existing tasks, keeping "Refer a friend" separate
+        // Check if "Refer a friend" is completed from one-time tasks
+        let referFriendDone = false;
+        try {
+          const completedRes = await fetch(`/api/player-points/${encodeURIComponent(walletAddress)}/completed/one`, { 
+            cache: "no-store" 
+          });
+          if (completedRes.ok) {
+            const completedData = await completedRes.json();
+            const completed = completedData?.completed || [];
+            referFriendDone = completed.some((c: any) => 
+              String(c?.taskId ?? "").trim() === "REFER_FRIEND" ||
+              String(c?.metadata?.title ?? "").toLowerCase().includes("refer")
+            );
+          }
+        } catch {
+          // ignore
+        }
+
+        const updatedTasks: SocialTask[] = [
+          { id: "REFER_FRIEND", title: "Refer a friend", reward: 50, done: referFriendDone },
+          ...tasks.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            reward: t.reward,
+            done: t.completed || false,
+            canVerify: t.canVerify || false,
+            xHandle: t.xHandle,
+          })),
+        ];
+
+        if (abort) return;
+        setSocialTasks(updatedTasks);
+        setCachedJson(cacheKey, { tasks: updatedTasks });
+      } catch (error) {
+        console.error("[DailyContent] Error loading social tasks:", error);
+        // Keep default state on error
+      } finally {
+        if (!abort) setSocialLoading(false);
+      }
+    }
+
+    loadSocialTasks();
+    return () => {
+      abort = true;
+    };
+  }, [walletAddress]);
+
+  // Handle task verification and claiming
+  const handleVerifyTask = async (taskId: string, xHandle: string | null | undefined) => {
+    if (!walletAddress || !xHandle) {
+      alert("Please connect your X account first to verify this task.");
+      return;
+    }
+
+    if (!taskId || !["FOLLOW_BAKELAND_X", "POST_GAMEPLAY_X"].includes(taskId)) {
+      return;
+    }
+
+    setSocialLoading(true);
+    try {
+      // Verify and claim the task using the claim endpoint
+      // This endpoint verifies and marks the task as completed in the backend
+      const claimRes = await fetch("/api/social/twitter/tasks/claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          address: walletAddress,
+          xHandle,
+          taskId,
+        }),
+      });
+
+      if (!claimRes.ok) {
+        const errorData = await claimRes.json().catch(() => ({}));
+        alert(errorData.error || "Failed to verify and claim task. Please try again later.");
+        return;
+      }
+
+      const claimData = await claimRes.json();
+      
+      if (!claimData.verified) {
+        alert(
+          claimData.error || 
+          (taskId === "FOLLOW_BAKELAND_X" 
+            ? "You are not following @bakelandxyz. Please follow and try again." 
+            : "No qualifying gameplay post found. Please post about Bakeland gameplay with @bakelandxyz tag and try again.")
+        );
+        return;
+      }
+
+      if (claimData.completed) {
+        alert("Task verified and completed! Reward credited to your account.");
+      } else {
+        // Task verified but not completed (backend endpoint may not be configured)
+        alert(claimData.message || "Task verified, but there was an issue completing it. Please contact support.");
+      }
+      
+      // Refresh task status to reflect completion
+      const cacheKey = `pp_tab_cache_social_tasks_${walletAddress}`;
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(cacheKey);
+      }
+      
+      const statusRes = await fetch(`/api/social/twitter/tasks/status?address=${encodeURIComponent(walletAddress)}`, {
+        cache: "no-store",
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        const tasks = statusData?.tasks || [];
+        setSocialTasks((prev) => {
+          const updated = [...prev];
+          const taskIndex = updated.findIndex((t) => t.id === taskId);
+          if (taskIndex >= 0) {
+            const taskData = tasks.find((t: any) => t.id === taskId);
+            updated[taskIndex] = {
+              ...updated[taskIndex],
+              done: taskData?.completed || claimData.completed || false,
+            };
+          }
+          return updated;
+        });
+      }
+    } catch (error) {
+      console.error("[DailyContent] Error verifying task:", error);
+      alert("An error occurred while verifying the task. Please try again later.");
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
       {/* Header with title and PP chip */}
       <div className="flex items-center justify-between gap-4 mb-3">
-        <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Daily</h2>
+        <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Bounties</h2>
         <div className="pixel-chip" aria-label="PP balance">
           <span className="pixel-chip__text">{currentPP} PP</span>
         </div>
       </div>
 
       {/* Loading overlay */}
-      {dailyLoading && (
+      {(dailyLoading || weeklyLoading || socialLoading) && (
         <div className="loading-overlay">
           <div className="loading-content">
             <div className="pixel-loading-spinner"></div>
-            <div className="loading-text">Loading daily tasks...</div>
+            <div className="loading-text">Loading bounties...</div>
           </div>
         </div>
       )}
@@ -1705,7 +1999,52 @@ function DailyContent() {
           <div className="tasks-section__title">Social Tasks</div>
           <div className="tasks-list">
             {socialTasks.map((t) => (
-              <div key={t.title} className="task-row">
+              <div key={t.id || t.title} className="task-row">
+                <div className="task-left">
+                  <span className="task-checkbox" aria-hidden="true">
+                    {t.done && (
+                      <Image
+                        src="/assets/Green Icons Outlined/checkmark.png"
+                        alt="checked"
+                        width={16}
+                        height={16}
+                        className="task-checkbox__mark"
+                      />
+                    )}
+                  </span>
+                  <span className="task-title">{t.title}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="task-reward">+{t.reward} PP</div>
+                  {!t.done && t.id && t.id !== "REFER_FRIEND" && t.canVerify && (
+                    <button
+                      onClick={() => handleVerifyTask(t.id!, t.xHandle)}
+                      className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded pixel-button"
+                      disabled={socialLoading}
+                    >
+                      Verify
+                    </button>
+                  )}
+                  {!t.done && t.id && t.id !== "REFER_FRIEND" && !t.canVerify && (
+                    <span className="text-xs text-zinc-400">Connect X</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="task-notes">
+            <div>• Posts must tag @bakelandxyz to be eligible</div>
+            <div>• Posts must include gameplay and/or Bakker footage showing Bakeland to be eligible</div>
+          </div>
+        </div>
+
+        {/* Daily Tasks */}
+        <div className="tasks-section mt-6">
+          <div className="tasks-section__title">Daily Tasks</div>
+          <div className="tasks-list">
+            {dailyTasks.map((t) => (
+              <div key={t.id} className="task-row">
                 <div className="task-left">
                   <span className="task-checkbox" aria-hidden="true">
                     {t.done && (
@@ -1724,18 +2063,13 @@ function DailyContent() {
               </div>
             ))}
           </div>
-
-          <div className="task-notes">
-            <div>• Posts must tag @bakelandxyz to be eligible</div>
-            <div>• Posts must include gameplay and/or Bakker footage showing Bakeland to be eligible</div>
-          </div>
         </div>
 
-        {/* Daily Tasks */}
+        {/* Weekly Tasks */}
         <div className="tasks-section mt-6">
-          <div className="tasks-section__title">Daily Tasks</div>
+          <div className="tasks-section__title">Weekly Tasks</div>
           <div className="tasks-list">
-            {dailyTasks.map((t) => (
+            {weeklyTasks.map((t) => (
               <div key={t.id} className="task-row">
                 <div className="task-left">
                   <span className="task-checkbox" aria-hidden="true">
@@ -1958,6 +2292,7 @@ type ReferredUser = {
   username?: string;
   userAddress?: string;
   joinedAt?: string;
+  lootboxesOpened?: number;
 };
 
 function InviteContent() {
@@ -2122,9 +2457,10 @@ function InviteContent() {
             {loading && !referredUsers.length ? (
               // Skeleton loaders for referred users
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={`skeleton-invite-${i}`} className="py-2 border-y border-zinc-700/70 flex items-center gap-3">
+                <div key={`skeleton-invite-${i}`} className="py-2 border-y border-zinc-700/70 grid grid-cols-[auto_1fr_auto] gap-3 items-center">
                   <div className="w-6 text-sm opacity-80 text-right">{i + 1}.</div>
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg flex-1 pixel-skeleton" style={{ height: '34px' }}></div>
+                  <div className="w-20 text-sm opacity-80 pixel-skeleton" style={{ height: '20px', borderRadius: '4px' }}></div>
                 </div>
               ))
             ) : referredUsers.length === 0 ? (
@@ -2133,13 +2469,21 @@ function InviteContent() {
               </div>
             ) : (
               <div className="space-y-1">
+                <div className="grid grid-cols-[auto_1fr_auto] gap-3 pb-2 mb-2 border-b border-zinc-700/70 text-sm font-semibold opacity-90">
+                  <div className="w-6"></div>
+                  <div>User</div>
+                  <div className="w-20 text-right">Lootboxes</div>
+                </div>
                 {referredUsers.map((user, idx) => (
-                  <div key={idx} className="py-2 border-y border-zinc-700/70 flex items-center gap-3">
+                  <div key={idx} className="py-2 border-y border-zinc-700/70 grid grid-cols-[auto_1fr_auto] gap-3 items-center">
                     <div className="w-6 text-sm opacity-80 text-right">{idx + 1}.</div>
                     <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg flex-1">
                       <span className="pixel-chip__text">
                         {user.username || shortenMiddle(user.userAddress || "--", 4, 4)}
                       </span>
+                    </div>
+                    <div className="w-20 text-sm opacity-80 text-right">
+                      {user.lootboxesOpened ?? 0}
                     </div>
                   </div>
                 ))}
