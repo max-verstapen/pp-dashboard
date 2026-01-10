@@ -218,7 +218,7 @@ export default function RightTabsPanel() {
   // Show create user flow if user doesn't exist
   if (showCreateUserFlow) {
     return (
-      <div className="pixel-window h-full w-full">
+      <div className="pixel-window w-full lg:h-full">
         <div className="pixel-window__inner">
           <CreateUserFlow 
             walletAddress={addressForApi || ""}
@@ -234,7 +234,7 @@ export default function RightTabsPanel() {
   }
 
   return (
-    <div className="pixel-window h-full w-full">
+    <div className="pixel-window w-full lg:h-full">
       {/* Tabs header */}
       <div className="pixel-tabs">
         {TAB_LABELS.map((label) => {
@@ -1257,13 +1257,18 @@ function LeaderboardContent() {
 
       {/* Rows */}
       <div className="lb-rows">
-        {rows.map((r, idx) => (
-          <div key={`${r.name ?? "row"}-${idx}`} className="lb-row">
-            <div className="lb-rank">{r.rank ?? idx + 1}</div>
-            <div className="lb-name">{r.name ?? "--"}</div>
-            <div className="lb-pp">{r.pp ?? 0}</div>
-          </div>
-        ))}
+        {rows.map((r, idx) => {
+          const rank = r.rank ?? idx + 1;
+          const name = r.name ?? "--";
+          const pp = r.pp ?? 0;
+          return (
+            <div key={`lb-${rank}-${idx}`} className="lb-row">
+              <div className="lb-rank">{rank}</div>
+              <div className="lb-name">{name}</div>
+              <div className="lb-pp">{pp}</div>
+            </div>
+          );
+        })}
         {rows.length === 0 && !loading && (
           <div className="mt-2 opacity-80">No leaderboard data.</div>
         )}

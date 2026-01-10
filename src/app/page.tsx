@@ -64,14 +64,15 @@ export default function Home() {
       {showRewardsModal && <RewardsModal onClose={handleRewardsModalClose} />}
 
       {/* Single-frame wrapper with equal T/B and equal L/R margins.
-          Fixed frame height; content inside scrolls rather than resizing the frame. */}
-      <main className="mx-[4vw] mt-[4svh] mb-[4svh] w-[calc(100vw-8vw)] h-[80svh]">
+          On small screens: natural height so panels stack one after another.
+          On large screens: fixed frame height with internal scrolling. */}
+      <main className="mx-[4vw] mt-[4svh] mb-[4svh] w-[calc(100vw-8vw)] min-h-[80svh] lg:h-[80svh]">
         {/* Responsive frame: stack on small screens, two columns on larger screens */}
-        <div className="grid h-full w-full min-h-0 grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="grid w-full min-h-0 grid-cols-1 gap-4 lg:h-full lg:grid-cols-12">
           {/* LEFT column */}
-          <section className="grid h-full min-h-0 grid-rows-[2fr_1fr] gap-4 lg:col-span-7">
+          <section className="grid min-h-0 grid-rows-[2fr_1fr] gap-4 lg:h-full lg:col-span-7">
             {/* Upper left: logo, title, bullets */}
-            <div className="panel overflow-y-auto">
+            <div className="panel overflow-y-auto p-6 md:p-8">
               <div className="flex flex-col items-start min-h-0">
                 <div className="mt-3 flex w-full items-center justify-between gap-3 overflow-hidden">
                   <img
@@ -152,7 +153,7 @@ export default function Home() {
           </section>
 
           {/* RIGHT column */}
-          <section className="h-full min-h-0 lg:col-span-5">
+          <section className="w-full min-h-0 lg:h-full lg:col-span-5">
             <RightTabsPanel />
           </section>
         </div>
