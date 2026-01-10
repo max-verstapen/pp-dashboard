@@ -1841,8 +1841,10 @@ function DailyContent() {
         const tasks = data?.tasks || [];
         
         // Merge with existing tasks, keeping "Refer a friend" separate
-        // Check if "Refer a friend" is completed from one-time tasks
+        // Check if "Refer a friend" is completed from one-time tasks OR if user has referred users
         let referFriendDone = false;
+        
+        // First check if task is already claimed/completed
         try {
           const completedRes = await fetch(`/api/player-points/${encodeURIComponent(walletAddress)}/completed/one`, { 
             cache: "no-store" 
@@ -1857,6 +1859,28 @@ function DailyContent() {
           }
         } catch {
           // ignore
+        }
+        
+        // Also check if user has referred at least 1 friend (task is complete-able)
+        if (!referFriendDone) {
+          try {
+            const referredRes = await fetch(`/api/user/${encodeURIComponent(walletAddress)}/referred-users`, { 
+              cache: "no-store" 
+            });
+            if (referredRes.ok) {
+              const referredData = await referredRes.json();
+              // Check multiple possible response structures
+              const referredUsers = 
+                referredData?.referredUsers || 
+                referredData?.referredUserAddresses || 
+                referredData?.raw?.referredUserAddresses || 
+                [];
+              // Mark as done if user has at least 1 referred user
+              referFriendDone = Array.isArray(referredUsers) && referredUsers.length > 0;
+            }
+          } catch {
+            // ignore
+          }
         }
 
         const updatedTasks: SocialTask[] = [
