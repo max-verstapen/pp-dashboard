@@ -13,6 +13,16 @@ type UserAllResponse = {
   username?: string;
   referralCount?: number;
   playerPoints?: number;
+  totalPoints?: number;
+  email?: string;
+  xHandle?: string;
+  discordHandle?: string;
+  raw?: {
+    all?: any;
+    user?: any;
+    referrals?: any;
+    points?: any;
+  };
   // allow additional fields without enforcing a strict shape
   [key: string]: any;
 };
@@ -328,8 +338,10 @@ function MyStatsContent() {
 
   const [apiUser, setApiUser] = useState<UserAllResponse | null>(null);
   const [apiLoading, setApiLoading] = useState<boolean>(false);
+  const [socialLoading, setSocialLoading] = useState<boolean>(false);
   const [playerRank, setPlayerRank] = useState<number | null>(null);
   const [apiUsername, setApiUsername] = useState<string | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
 
   const adapterAddress = useMemo(() => globalWalletAddress || rawAdapterPk || null, [globalWalletAddress, rawAdapterPk]);
   const addressForApi = useMemo(
@@ -450,83 +462,146 @@ function MyStatsContent() {
       // Check cache first
       const cached = getCachedJson<UserAllResponse>(cacheKey);
       if (cached) {
+        console.log("[MyStats] Using cached social lookup data");
         setApiUser((prev) => prev ?? cached);
+        setSocialLoading(false);
+        setIsInitialLoad(false);
         return;
       }
 
+      setSocialLoading(true);
       let userData: any = null;
+      let foundAddress: string | null = null;
 
       try {
+        // Try to find user by email/X/Discord
         if (normalizedEmail) {
           try {
-            // eslint-disable-next-line no-console
             console.info("[MyStats] fallback /api/user/by-email", normalizedEmail);
+            // Pass email directly - Next.js route will handle it, and upstream expects literal email
             const res = await fetch(`/api/user/by-email/${normalizedEmail}`, { cache: "no-store" });
+            console.log("[MyStats] Email lookup response status:", res.status);
             if (res.ok) {
               userData = await res.json();
+              console.log("[MyStats] User data from email lookup:", JSON.stringify(userData, null, 2));
+              foundAddress =
+                userData?.userAddress ||
+                userData?.address ||
+                userData?.walletAddress ||
+                userData?.wallet_address ||
+                userData?.user?.address ||
+                userData?.user?.walletAddress ||
+                userData?.user?.wallet_address ||
+                null;
+              console.log("[MyStats] Found address from email lookup:", foundAddress);
+            } else {
+              const errorText = await res.text().catch(() => "");
+              console.warn("[MyStats] Email lookup failed:", res.status, errorText);
             }
-          } catch {
-            // ignore and try next strategy
+          } catch (error) {
+            console.error("[MyStats] Error fetching by email:", error);
           }
         }
 
         if (!userData && normalizedTwitter) {
           try {
-            // eslint-disable-next-line no-console
             console.info("[MyStats] fallback /api/user/by-x", normalizedTwitter);
             const res = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter)}`, {
               cache: "no-store",
             });
             if (res.ok) {
               userData = await res.json();
+              foundAddress =
+                userData?.userAddress ||
+                userData?.address ||
+                userData?.walletAddress ||
+                userData?.wallet_address ||
+                userData?.user?.address ||
+                userData?.user?.walletAddress ||
+                userData?.user?.wallet_address ||
+                null;
             }
-          } catch {
-            // ignore
+          } catch (error) {
+            console.error("[MyStats] Error fetching by X handle:", error);
           }
         }
 
         if (!userData && normalizedDiscord) {
           try {
-            // eslint-disable-next-line no-console
             console.info("[MyStats] fallback /api/user/by-discord", normalizedDiscord);
             const res = await fetch(`/api/user/by-discord/${encodeURIComponent(normalizedDiscord)}`, {
               cache: "no-store",
             });
             if (res.ok) {
               userData = await res.json();
+              foundAddress =
+                userData?.userAddress ||
+                userData?.address ||
+                userData?.walletAddress ||
+                userData?.wallet_address ||
+                userData?.user?.address ||
+                userData?.user?.walletAddress ||
+                userData?.user?.wallet_address ||
+                null;
             }
-          } catch {
-            // ignore
+          } catch (error) {
+            console.error("[MyStats] Error fetching by Discord handle:", error);
           }
         }
 
+        // If we found a user and they have an address, fetch the full profile using /all endpoint
+        if (!cancelled && foundAddress) {
+          console.info("[MyStats] Found address from social lookup, fetching /all endpoint:", foundAddress);
+          try {
+            const allRes = await fetch(`/api/user/${encodeURIComponent(foundAddress)}/all`, { cache: "no-store" });
+            if (allRes.ok) {
+              const allData = await allRes.json() as UserAllResponse;
+              console.log("[MyStats] Full user data from /all endpoint:", allData);
+              setApiUser((prev) => prev ?? allData);
+              setCachedJson(cacheKey, allData);
+              
+              // Dispatch address to global wallet
+              if (typeof window !== "undefined") {
+                console.info("[MyStats] dispatch setUserAddress from social/email lookup", foundAddress);
+                window.dispatchEvent(
+                  new CustomEvent("setUserAddress", {
+                    detail: foundAddress,
+                  })
+                );
+              }
+              return;
+            }
+          } catch (error) {
+            console.error("[MyStats] Error fetching /all endpoint:", error);
+            // Fall through to use basic userData
+          }
+        }
+
+        // Fallback: use the basic userData we found (even without address)
         if (!cancelled && userData) {
-          setApiUser((prev) => prev ?? (userData as UserAllResponse));
-          // Cache the social lookup result
-          setCachedJson(cacheKey, userData as UserAllResponse);
-
-          const normalizedAddress =
-            userData?.userAddress ||
-            userData?.address ||
-            userData?.walletAddress ||
-            userData?.wallet_address ||
-            userData?.user?.address ||
-            userData?.user?.walletAddress ||
-            userData?.user?.wallet_address ||
-            null;
-
-          if (normalizedAddress && typeof window !== "undefined") {
-            // eslint-disable-next-line no-console
-            console.info("[MyStats] dispatch setUserAddress from social/email lookup", normalizedAddress);
-            window.dispatchEvent(
-              new CustomEvent("setUserAddress", {
-                detail: normalizedAddress,
-              })
-            );
-          }
+          console.log("[MyStats] Using basic userData (no address found):", userData);
+          // Try to structure it similarly to /all response
+          const structuredData: UserAllResponse = {
+            username: userData?.username || userData?.user?.username || null,
+            referralCount: userData?.referralCount || userData?.referrals?.count || null,
+            playerPoints: userData?.playerPoints || userData?.totalPoints || userData?.points?.total || null,
+            email: userData?.email || normalizedEmail || null,
+            xHandle: userData?.xHandle || userData?.['x-handle'] || normalizedTwitter || null,
+            discordHandle: userData?.discordHandle || userData?.['discord-handle'] || normalizedDiscord || null,
+            raw: {
+              all: userData,
+            },
+          };
+          setApiUser((prev) => prev ?? structuredData);
+          setCachedJson(cacheKey, structuredData);
         }
-      } catch {
-        // swallow; stats will just stay empty
+      } catch (error) {
+        console.error("[MyStats] Error in loadBySocial:", error);
+      } finally {
+        if (!cancelled) {
+          setSocialLoading(false);
+          setIsInitialLoad(false);
+        }
       }
     }
 
@@ -541,8 +616,13 @@ function MyStatsContent() {
     async function load() {
       const addr = addressForApi;
       if (!addr) {
-        setApiUser(null);
-        setApiUsername(null);
+        // Don't clear apiUser or apiUsername if we have social auth - 
+        // the social lookup effect will handle fetching user data
+        // Only clear if we truly have no connection method
+        if (!googleEmail && !effectiveTwitter && !effectiveDiscord) {
+          setApiUser(null);
+          setApiUsername(null);
+        }
         return;
       }
       
@@ -552,10 +632,12 @@ function MyStatsContent() {
       if (cached) {
         setApiUser(cached);
         setApiLoading(false);
+        setIsInitialLoad(false);
         return;
       }
       
       setApiLoading(true);
+      setIsInitialLoad(true);
       try {
         // eslint-disable-next-line no-console
         console.info("[MyStats] GET /api/user/[address]/all ->", addr);
@@ -567,6 +649,12 @@ function MyStatsContent() {
           return;
         }
         const data = (await res.json()) as UserAllResponse;
+        console.log("=== MYSTATS: User data from API ===");
+        console.log("Full API response:", JSON.stringify(data, null, 2));
+        console.log("Email from API:", data?.raw?.all?.email || data?.email || "not found");
+        console.log("X Handle from API:", data?.raw?.all?.xHandle || data?.raw?.all?.['x-handle'] || data?.xHandle || "not found");
+        console.log("Discord Handle from API:", data?.raw?.all?.discordHandle || data?.raw?.all?.['discord-handle'] || data?.discordHandle || "not found");
+        console.log("====================================");
         if (!abort) {
           setApiUser(data || null);
           // Cache the response
@@ -577,7 +665,10 @@ function MyStatsContent() {
         console.error("[MyStats] /api/user/[address]/all fetch failed");
         if (!abort) setApiUser(null);
       } finally {
-        if (!abort) setApiLoading(false);
+        if (!abort) {
+          setApiLoading(false);
+          setIsInitialLoad(false);
+        }
       }
     }
     load();
@@ -793,8 +884,9 @@ function MyStatsContent() {
   }, [addressForApi]);
 
   const adapterConnected = globalWalletConnected;
-  const isConnected = globalWalletConnected || !!effectiveTwitter || !!effectiveDiscord;
-  const anyConnected = !!effectiveTwitter || !!effectiveDiscord || globalWalletConnected;
+  // User is connected if they have wallet, or any social auth (Google, X, Discord), or if we have API user data
+  const isConnected = globalWalletConnected || !!googleEmail || !!effectiveTwitter || !!effectiveDiscord || !!apiUser;
+  const anyConnected = !!googleEmail || !!effectiveTwitter || !!effectiveDiscord || globalWalletConnected;
 
   // Prefer the raw public key if present regardless of the adapter 'connected' flag.
   const adapterPk = globalWalletAddress || rawAdapterPk || null;
@@ -818,6 +910,49 @@ function MyStatsContent() {
       // ignore
     }
   }
+
+  // Extract linked handles from API response
+  const apiLinkedEmail = apiUser?.raw?.all?.email || apiUser?.email || null;
+  const apiLinkedXHandle = apiUser?.raw?.all?.xHandle || apiUser?.raw?.all?.['x-handle'] || apiUser?.xHandle || null;
+  const apiLinkedDiscordHandle = apiUser?.raw?.all?.discordHandle || apiUser?.raw?.all?.['discord-handle'] || apiUser?.discordHandle || null;
+  
+  // Use API-linked handles if available, otherwise fall back to session handles
+  const displayEmail = apiLinkedEmail || googleEmail || null;
+  const displayXHandle = apiLinkedXHandle || effectiveTwitter || null;
+  const displayDiscordHandle = apiLinkedDiscordHandle || effectiveDiscord || null;
+  
+  // Check if handles are linked in API (regardless of session)
+  const isEmailLinkedInApi = !!apiLinkedEmail;
+  const isXLinkedInApi = !!apiLinkedXHandle;
+  const isDiscordLinkedInApi = !!apiLinkedDiscordHandle;
+  
+  // Debug logging for linked handles and connection state
+  useEffect(() => {
+    console.log("=== MYSTATS: Connection & Data Debug ===");
+    console.log("addressForApi:", addressForApi);
+    console.log("apiUser:", apiUser);
+    console.log("googleEmail:", googleEmail);
+    console.log("effectiveTwitter:", effectiveTwitter);
+    console.log("effectiveDiscord:", effectiveDiscord);
+    console.log("isConnected:", isConnected);
+    console.log("anyConnected:", anyConnected);
+    if (apiUser) {
+      console.log("API Linked Email:", apiLinkedEmail);
+      console.log("API Linked X Handle:", apiLinkedXHandle);
+      console.log("API Linked Discord Handle:", apiLinkedDiscordHandle);
+      console.log("Display Email:", displayEmail);
+      console.log("Display X Handle:", displayXHandle);
+      console.log("Display Discord Handle:", displayDiscordHandle);
+      console.log("Is Email Linked in API:", isEmailLinkedInApi);
+      console.log("Is X Linked in API:", isXLinkedInApi);
+      console.log("Is Discord Linked in API:", isDiscordLinkedInApi);
+      console.log("API User Username:", apiUser?.username || apiUsername);
+      console.log("API User ReferralCount:", apiUser?.referralCount);
+      console.log("API User PlayerPoints:", apiUser?.playerPoints || apiUser?.totalPoints);
+    }
+    console.log("======================================");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiUser, addressForApi, googleEmail, effectiveTwitter, effectiveDiscord, isConnected]);
 
   const usernameFromApi = apiUsername || apiUser?.username;
   // Only use Twitter handle as fallback if we have no username from API at all
@@ -846,9 +981,22 @@ function MyStatsContent() {
       ? `Rank: ${playerRank}`
       : "--";
 
+  const isLoading = (apiLoading || socialLoading) && isInitialLoad && !apiUser;
+  const isRefreshing = (apiLoading || socialLoading) && !isInitialLoad && !!apiUser;
+
   return (
-    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col">
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
       <h2 className="text-2xl md:text-3xl drop-shadow font-bold mb-4">My Stats</h2>
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="pixel-loading-spinner"></div>
+            <div className="loading-text">Loading stats...</div>
+          </div>
+        </div>
+      )}
 
       {/* No user creation flow; we only display existing data */}
 
@@ -857,26 +1005,26 @@ function MyStatsContent() {
         <div className="stats-list">
           <div className="stats-row">
             <Image src="/assets/Green Icons Outlined/at.png" alt="username" width={26} height={26} className="stats-icon" />
-            <div className="pixel-chip pixel-chip--entry">
-              <span className="pixel-chip__text">{isConnected ? displayUsername : "--"}</span>
+            <div className={`pixel-chip pixel-chip--entry ${isLoading ? 'pixel-skeleton' : isRefreshing ? 'pixel-loading' : ''}`}>
+              <span className="pixel-chip__text">{isLoading ? "" : (isConnected ? displayUsername : "--")}</span>
             </div>
           </div>
           <div className="stats-row">
             <Image src="/assets/Green Icons Outlined/power_B.png" alt="PP" width={26} height={26} className="stats-icon" />
-            <div className="pixel-chip pixel-chip--entry">
-              <span className="pixel-chip__text">{displayPP}</span>
+            <div className={`pixel-chip pixel-chip--entry ${isLoading ? 'pixel-skeleton' : isRefreshing ? 'pixel-loading' : ''}`}>
+              <span className="pixel-chip__text">{isLoading ? "" : displayPP}</span>
             </div>
           </div>
           <div className="stats-row">
             <Image src="/assets/Green Icons Outlined/stats_A.png" alt="Rank" width={26} height={26} className="stats-icon" />
-            <div className="pixel-chip pixel-chip--entry">
-              <span className="pixel-chip__text">{displayRank}</span>
+            <div className={`pixel-chip pixel-chip--entry ${isLoading ? 'pixel-skeleton' : isRefreshing ? 'pixel-loading' : ''}`}>
+              <span className="pixel-chip__text">{isLoading ? "" : displayRank}</span>
             </div>
           </div>
           <div className="stats-row">
             <Image src="/assets/Green Icons Outlined/friend_add.png" alt="Referrals" width={26} height={26} className="stats-icon" />
-            <div className="pixel-chip pixel-chip--entry">
-              <span className="pixel-chip__text">{displayReferrals === "--" ? "--" : `${displayReferrals} Referrals`}</span>
+            <div className={`pixel-chip pixel-chip--entry ${isLoading ? 'pixel-skeleton' : isRefreshing ? 'pixel-loading' : ''}`}>
+              <span className="pixel-chip__text">{isLoading ? "" : (displayReferrals === "--" ? "--" : `${displayReferrals} Referrals`)}</span>
             </div>
           </div>
           {/* SOL balance - will add back after basic connection works */}
@@ -897,11 +1045,47 @@ function MyStatsContent() {
             {/* Google Account */}
             <div className="stats-row">
               <Image src="/assets/google.png" alt="Google" width={26} height={26} className="stats-icon" />
-              {googleEmail ? (
+              {displayEmail ? (
                 <div className="flex items-center gap-2">
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
-                    <span className="pixel-chip__text">{cleanAccountName(googleEmail)}</span>
+                    <span className="pixel-chip__text">{cleanAccountName(displayEmail)}</span>
                   </div>
+                  {!isEmailLinkedInApi && googleEmail && addressForApi && (
+                    <button
+                      type="button"
+                      className="pixel-chip pixel-chip--entry"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/email`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: googleEmail }),
+                          });
+                          if (res.ok) {
+                            setDidSyncGoogle(true);
+                            // Clear cache and refetch user data
+                            const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
+                            try {
+                              if (typeof window !== "undefined") {
+                                window.sessionStorage.removeItem(cacheKey);
+                              }
+                            } catch {}
+                            // Refetch user data
+                            const refetchRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+                            if (refetchRes.ok) {
+                              const refetchData = await refetchRes.json() as UserAllResponse;
+                              setApiUser(refetchData || null);
+                              if (refetchData) setCachedJson(cacheKey, refetchData);
+                            }
+                          }
+                        } catch (error) {
+                          console.error("[MyStats] Error linking email:", error);
+                        }
+                      }}
+                    >
+                      <span className="pixel-chip__text">Link</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -919,11 +1103,47 @@ function MyStatsContent() {
             {/* X/Twitter Account */}
             <div className="stats-row">
               <Image src="/assets/x.png" alt="X" width={26} height={26} className="stats-icon" />
-              {effectiveTwitter ? (
+              {displayXHandle ? (
                 <div className="flex items-center gap-2">
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
-                    <span className="pixel-chip__text">@{cleanAccountName(effectiveTwitter)}</span>
+                    <span className="pixel-chip__text">@{cleanAccountName(displayXHandle)}</span>
                   </div>
+                  {!isXLinkedInApi && effectiveTwitter && addressForApi && (
+                    <button
+                      type="button"
+                      className="pixel-chip pixel-chip--entry"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/x-handle`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ xHandle: effectiveTwitter }),
+                          });
+                          if (res.ok) {
+                            setDidSyncX(true);
+                            // Clear cache and refetch user data
+                            const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
+                            try {
+                              if (typeof window !== "undefined") {
+                                window.sessionStorage.removeItem(cacheKey);
+                              }
+                            } catch {}
+                            // Refetch user data
+                            const refetchRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+                            if (refetchRes.ok) {
+                              const refetchData = await refetchRes.json() as UserAllResponse;
+                              setApiUser(refetchData || null);
+                              if (refetchData) setCachedJson(cacheKey, refetchData);
+                            }
+                          }
+                        } catch (error) {
+                          console.error("[MyStats] Error linking X handle:", error);
+                        }
+                      }}
+                    >
+                      <span className="pixel-chip__text">Link</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -941,11 +1161,47 @@ function MyStatsContent() {
             {/* Discord Account */}
             <div className="stats-row">
               <Image src="/assets/discord.png" alt="Discord" width={26} height={26} className="stats-icon" />
-              {effectiveDiscord ? (
+              {displayDiscordHandle ? (
                 <div className="flex items-center gap-2">
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
-                    <span className="pixel-chip__text">{cleanAccountName(effectiveDiscord)}</span>
+                    <span className="pixel-chip__text">{cleanAccountName(displayDiscordHandle)}</span>
                   </div>
+                  {!isDiscordLinkedInApi && effectiveDiscord && addressForApi && (
+                    <button
+                      type="button"
+                      className="pixel-chip pixel-chip--entry"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/discord-handle`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ discordHandle: effectiveDiscord }),
+                          });
+                          if (res.ok) {
+                            setDidSyncDiscord(true);
+                            // Clear cache and refetch user data
+                            const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
+                            try {
+                              if (typeof window !== "undefined") {
+                                window.sessionStorage.removeItem(cacheKey);
+                              }
+                            } catch {}
+                            // Refetch user data
+                            const refetchRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+                            if (refetchRes.ok) {
+                              const refetchData = await refetchRes.json() as UserAllResponse;
+                              setApiUser(refetchData || null);
+                              if (refetchData) setCachedJson(cacheKey, refetchData);
+                            }
+                          }
+                        } catch (error) {
+                          console.error("[MyStats] Error linking Discord handle:", error);
+                        }
+                      }}
+                    >
+                      <span className="pixel-chip__text">Link</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button
@@ -1130,7 +1386,7 @@ function GameContent() {
   const list = tasks ?? [];
 
   return (
-    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col">
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
       {/* Header with title and PP chip */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Game</h2>
@@ -1139,6 +1395,16 @@ function GameContent() {
         </div>
       </div>
 
+      {/* Loading overlay */}
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="pixel-loading-spinner"></div>
+            <div className="loading-text">Loading tasks...</div>
+          </div>
+        </div>
+      )}
+
       <div className="tasks-scroll">
         <div className="tasks-section">
           <div className="tasks-section__title">Primary Tasks</div>
@@ -1146,32 +1412,41 @@ function GameContent() {
             <div className="mb-2 text-yellow-200/90">{error}</div>
           )}
           <div className="tasks-list">
-            {list.map((t) => (
-              <div key={t.id} className="task-row">
-                <div className="task-left">
-                  <span className="task-checkbox" aria-hidden="true">
-                    {t.done && (
-                      <Image
-                        src="/assets/Green Icons Outlined/checkmark.png"
-                        alt="checked"
-                        width={16}
-                        height={16}
-                        className="task-checkbox__mark"
-                      />
-                    )}
-                  </span>
-                  <span className="task-title">{t.title}</span>
+            {loading && !list.length ? (
+              // Skeleton loaders for tasks
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={`skeleton-${i}`} className="task-row">
+                  <div className="task-left">
+                    <span className="task-checkbox pixel-skeleton" style={{ minWidth: '28px', minHeight: '28px' }} aria-hidden="true"></span>
+                    <span className="task-title pixel-skeleton" style={{ height: '20px', width: '200px', borderRadius: '4px' }}></span>
+                  </div>
+                  <div className="task-reward pixel-skeleton" style={{ height: '20px', width: '60px', borderRadius: '4px' }}></div>
                 </div>
-                <div className="task-reward">+{t.rewardPP} PP</div>
-              </div>
-            ))}
+              ))
+            ) : (
+              list.map((t) => (
+                <div key={t.id} className="task-row">
+                  <div className="task-left">
+                    <span className="task-checkbox" aria-hidden="true">
+                      {t.done && (
+                        <Image
+                          src="/assets/Green Icons Outlined/checkmark.png"
+                          alt="checked"
+                          width={16}
+                          height={16}
+                          className="task-checkbox__mark"
+                        />
+                      )}
+                    </span>
+                    <span className="task-title">{t.title}</span>
+                  </div>
+                  <div className="task-reward">+{t.rewardPP} PP</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
-
-      {loading && (
-        <div className="mt-3 opacity-80">Loading tasks...</div>
-      )}
     </div>
   );
 }
@@ -1233,7 +1508,7 @@ function LeaderboardContent() {
   }, []);
 
   return (
-    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col">
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
       {/* Header row */}
       <div className="flex items-center gap-4 mb-4">
         <h2 className="text-2xl md:text-3xl drop-shadow font-bold flex items-center gap-2">
@@ -1248,6 +1523,16 @@ function LeaderboardContent() {
         </h2>
       </div>
 
+      {/* Loading overlay */}
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="pixel-loading-spinner"></div>
+            <div className="loading-text">Loading leaderboard...</div>
+          </div>
+        </div>
+      )}
+
       {/* Table header */}
       <div className="lb-header-row">
         <div>Rank</div>
@@ -1257,18 +1542,29 @@ function LeaderboardContent() {
 
       {/* Rows */}
       <div className="lb-rows">
-        {rows.map((r, idx) => {
-          const rank = r.rank ?? idx + 1;
-          const name = r.name ?? "--";
-          const pp = r.pp ?? 0;
-          return (
-            <div key={`lb-${rank}-${idx}`} className="lb-row">
-              <div className="lb-rank">{rank}</div>
-              <div className="lb-name">{name}</div>
-              <div className="lb-pp">{pp}</div>
+        {loading && !rows.length ? (
+          // Skeleton loaders for leaderboard rows
+          Array.from({ length: 10 }).map((_, i) => (
+            <div key={`skeleton-lb-${i}`} className="lb-row">
+              <div className="lb-rank pixel-skeleton" style={{ height: '20px', width: '40px', borderRadius: '4px' }}></div>
+              <div className="lb-name pixel-skeleton" style={{ height: '20px', width: '150px', borderRadius: '4px' }}></div>
+              <div className="lb-pp pixel-skeleton" style={{ height: '20px', width: '80px', borderRadius: '4px' }}></div>
             </div>
-          );
-        })}
+          ))
+        ) : (
+          rows.map((r, idx) => {
+            const rank = r.rank ?? idx + 1;
+            const name = r.name ?? "--";
+            const pp = r.pp ?? 0;
+            return (
+              <div key={`lb-${rank}-${idx}`} className="lb-row">
+                <div className="lb-rank">{rank}</div>
+                <div className="lb-name">{name}</div>
+                <div className="lb-pp">{pp}</div>
+              </div>
+            );
+          })
+        )}
         {rows.length === 0 && !loading && (
           <div className="mt-2 opacity-80">No leaderboard data.</div>
         )}
@@ -1280,6 +1576,7 @@ function LeaderboardContent() {
 function DailyContent() {
   const currentPP = 4200;
   const walletAddress = useMemo(() => null as string | null, []);
+  const [dailyLoading, setDailyLoading] = useState<boolean>(false);
 
   const socialTasks = [
     { done: true, title: "Refer a friend", reward: 50 },
@@ -1299,6 +1596,7 @@ function DailyContent() {
     if (!walletAddress) {
       // Reset to defaults (not completed)
       setDailyTasks((prev) => prev.map((t) => ({ ...t, done: false })));
+      setDailyLoading(false);
       return;
     }
     async function loadCompletedDaily() {
@@ -1315,12 +1613,15 @@ function DailyContent() {
             return { ...t, done: isDoneById || isDoneByTitle || t.done };
           })
         );
+        setDailyLoading(false);
         return;
       }
       
+      setDailyLoading(true);
       try {
         const res = await fetch(`/api/player-points/${encodeURIComponent(walletAddress)}/completed/daily`, { cache: "no-store" });
         if (!res.ok) {
+          if (!abort) setDailyLoading(false);
           return;
         }
         const data = await res.json();
@@ -1350,6 +1651,8 @@ function DailyContent() {
         );
       } catch {
         // ignore
+      } finally {
+        if (!abort) setDailyLoading(false);
       }
     }
     loadCompletedDaily();
@@ -1359,7 +1662,7 @@ function DailyContent() {
   }, [walletAddress]);
 
   return (
-    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col">
+    <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
       {/* Header with title and PP chip */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Daily</h2>
@@ -1367,6 +1670,16 @@ function DailyContent() {
           <span className="pixel-chip__text">{currentPP} PP</span>
         </div>
       </div>
+
+      {/* Loading overlay */}
+      {dailyLoading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="pixel-loading-spinner"></div>
+            <div className="loading-text">Loading daily tasks...</div>
+          </div>
+        </div>
+      )}
 
       <div className="tasks-scroll">
         {/* Social Tasks */}
@@ -1748,20 +2061,29 @@ function InviteContent() {
         <div className="mb-4 text-yellow-200/90 text-sm">{error}</div>
       )}
 
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loading-content">
+            <div className="pixel-loading-spinner"></div>
+            <div className="loading-text">Loading invite data...</div>
+          </div>
+        </div>
+      )}
+
       {!loading && (
         <div className="flex flex-col gap-6">
           {/* Referral Code Section */}
           <div className="stats-section">
             <div className="stats-section__title mb-3">Your Referral Code</div>
             <div className="flex items-center gap-3">
-              <div className="flex-1 px-3 py-2 bg-black/30 border border-zinc-600 rounded text-zinc-100 text-sm">
+              <div className={`flex-1 px-3 py-2 bg-black/30 border border-zinc-600 rounded text-zinc-100 text-sm ${loading ? 'pixel-skeleton' : ''}`}>
                 {displayCode}
               </div>
               <PixelButton
                 variant="tab"
                 size="sm"
                 onClick={handleCopyCode}
-                disabled={!referralCode}
+                disabled={!referralCode || loading}
               >
                 Copy
               </PixelButton>
@@ -1776,7 +2098,15 @@ function InviteContent() {
             <div className="stats-section__title mb-3">
               Referred Users ({referredUsers.length})
             </div>
-            {referredUsers.length === 0 ? (
+            {loading && !referredUsers.length ? (
+              // Skeleton loaders for referred users
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={`skeleton-invite-${i}`} className="py-2 border-y border-zinc-700/70 flex items-center gap-3">
+                  <div className="w-6 text-sm opacity-80 text-right">{i + 1}.</div>
+                  <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg flex-1 pixel-skeleton" style={{ height: '34px' }}></div>
+                </div>
+              ))
+            ) : referredUsers.length === 0 ? (
               <div className="opacity-80 text-sm">
                 No users have been referred yet. Share your code to get started!
               </div>

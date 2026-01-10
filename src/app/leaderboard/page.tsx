@@ -26,7 +26,7 @@ export default async function LeaderboardPage({
 }) {
   const baseUrl = process.env.USER_API_BASE_URL;
   const apiKey = process.env.USER_API_KEY;
-  const limitParam = (searchParams?.limit as string) ?? "100";
+  const limitParam = (searchParams?.limit as string) ?? "20";
 
   if (!baseUrl || !apiKey) {
     return (
@@ -64,13 +64,63 @@ export default async function LeaderboardPage({
       throw new Error(`Upstream error ${res.status}: ${text}`);
     }
 
-    data = (await res.json()) as LeaderboardResponse;
+    const rawData = await res.json();
+    console.log("=== LEADERBOARD FETCH DEBUG ===");
+    console.log("URL:", url.toString());
+    console.log("Response Status:", res.status);
+    console.log("Raw Response Data:", JSON.stringify(rawData, null, 2));
+    console.log("Raw Data Type:", typeof rawData);
+    console.log("Is Array?", Array.isArray(rawData));
+    console.log("Has leaderboard key?", rawData && typeof rawData === 'object' && 'leaderboard' in rawData);
+    console.log("Has items key?", rawData && typeof rawData === 'object' && 'items' in rawData);
+    
+    // Handle different response formats
+    if (Array.isArray(rawData)) {
+      // API returns array directly
+      data = {
+        leaderboard: rawData.map((item: any, index: number) => ({
+          rank: item.rank ?? index + 1,
+          userAddress: item.userAddress || item.address || '',
+          username: item.username || item.name || 'Unknown User',
+          totalPoints: item.totalPoints ?? item.points ?? 0,
+          level: item.level ?? 1,
+        })),
+        count: rawData.length,
+      };
+    } else if (rawData && typeof rawData === 'object') {
+      // Handle object responses with different key names
+      const itemsArray = rawData.leaderboard || rawData.items || rawData.data || [];
+      data = {
+        leaderboard: itemsArray.map((item: any, index: number) => ({
+          rank: item.rank ?? index + 1,
+          userAddress: item.userAddress || item.address || '',
+          username: item.username || item.name || item.user?.username || 'Unknown User',
+          totalPoints: item.totalPoints ?? item.points ?? item.playerPoints ?? 0,
+          level: item.level ?? 1,
+        })),
+        count: rawData.count ?? rawData.total ?? itemsArray.length,
+      };
+    } else {
+      data = { leaderboard: [], count: 0 };
+    }
+    
+    console.log("Processed Data:", JSON.stringify(data, null, 2));
+    console.log("Leaderboard Items Count:", data?.leaderboard?.length ?? 0);
+    console.log("Leaderboard Items:", data?.leaderboard ?? []);
+    console.log("===============================");
   } catch (err) {
     errorText =
       err instanceof Error ? err.message : "Failed to load leaderboard.";
+    console.error("=== LEADERBOARD FETCH ERROR ===");
+    console.error("Error:", err);
+    console.error("===============================");
   }
 
   const items = data?.leaderboard ?? [];
+  console.log("=== LEADERBOARD RENDER DEBUG ===");
+  console.log("Items to render:", items.length);
+  console.log("Items data:", items);
+  console.log("================================");
 
   return (
     <div className="flex min-h-[100svh] items-center justify-center font-sans">
