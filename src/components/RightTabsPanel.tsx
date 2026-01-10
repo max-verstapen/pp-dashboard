@@ -166,6 +166,9 @@ export default function RightTabsPanel() {
     }
     
     async function check() {
+      // Guard against null address inside the function
+      if (!addressForApi) return;
+      
       try {
         const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}`, { cache: "no-store" });
         
@@ -626,6 +629,9 @@ function MyStatsContent() {
         return;
       }
       
+      // Guard against null address inside the function
+      if (!addr) return;
+      
       // Check cache first
       const cacheKey = `pp_tab_cache_mystats_all_${addr}`;
       const cached = getCachedJson<UserAllResponse>(cacheKey);
@@ -686,6 +692,9 @@ function MyStatsContent() {
       return;
     }
     async function loadUsername() {
+      // Guard against null address inside the function
+      if (!addr) return;
+      
       // Check cache first
       const cacheKey = `pp_tab_cache_mystats_username_${addr}`;
       const cached = getCachedJson<string>(cacheKey);
@@ -844,6 +853,9 @@ function MyStatsContent() {
       return;
     }
     async function loadRank() {
+      // Guard against null address inside the function
+      if (!unifiedAddr) return;
+      
       // Check cache first
       const cacheKey = `pp_tab_cache_mystats_rank_${unifiedAddr}`;
       const cached = getCachedJson<number>(cacheKey);
@@ -1335,6 +1347,9 @@ function GameContent() {
       return;
     }
     async function loadCompleted() {
+      // Guard against null address inside the function
+      if (!walletAddress) return;
+      
       // Check cache first
       const cacheKey = `pp_tab_cache_game_completed_${walletAddress}`;
       const cached = getCachedJson<string[]>(cacheKey);
@@ -1600,6 +1615,9 @@ function DailyContent() {
       return;
     }
     async function loadCompletedDaily() {
+      // Guard against null address inside the function
+      if (!walletAddress) return;
+      
       // Check cache first
       const cacheKey = `pp_tab_cache_daily_completed_${walletAddress}`;
       const cached = getCachedJson<{ idSet: string[]; titleSet: string[] }>(cacheKey);
@@ -1958,6 +1976,9 @@ function InviteContent() {
     }
 
     async function loadInviteData() {
+      // Guard against null address inside the function
+      if (!address) return;
+      
       try {
         // Check cache first
         const cacheKey = `pp_tab_cache_invite_${address}`;
