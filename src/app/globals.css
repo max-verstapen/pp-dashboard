@@ -93,6 +93,8 @@ body {
 .shuffle-anim .card:nth-child(4) { animation-delay: 60ms; }
 .shuffle-anim .card:nth-child(5) { animation-delay: 80ms; }
 .shuffle-anim .card:nth-child(6) { animation-delay: 100ms; }
+.shuffle-anim .card:nth-child(7) { animation-delay: 120ms; }
+.shuffle-anim .card:nth-child(8) { animation-delay: 140ms; }
 
 /* Reusable pixel button using panel assets */
 .pixel-btn {
@@ -182,6 +184,12 @@ body {
   padding: 4px 6px 0 6px;
   /* let tabs overflow horizontally on small screens */
   overflow-x: auto;
+  /* Hide scrollbar on hover */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+.pixel-tabs::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 .pixel-tab {
   position: relative;
