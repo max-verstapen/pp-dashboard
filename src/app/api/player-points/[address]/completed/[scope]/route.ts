@@ -70,6 +70,26 @@ export async function GET(
         // Not JSON, use text as-is
       }
 
+      // Check if this is the DynamoDB filter expression error
+      // This happens when the backend tries to use completionKey (a primary key) in a filter expression
+      const errorMessage = parsedError?.error || text || "";
+      const isDynamoDBFilterError = 
+        typeof errorMessage === "string" && 
+        errorMessage.includes("Filter Expression can only contain non-primary key attributes") &&
+        errorMessage.includes("completionKey");
+
+      if (isDynamoDBFilterError) {
+        // Gracefully degrade: return empty completed array instead of error
+        // This allows the frontend to continue working while the backend issue is fixed
+        console.warn(`[API] Detected DynamoDB filter expression error, returning empty completed array`, {
+          address: address.substring(0, 10) + "...",
+          scope: upstreamScope,
+          url: url,
+          error: errorMessage,
+        });
+        return NextResponse.json({ completed: [] }, { status: 200 });
+      }
+
       console.error(`[API] Upstream error for completed tasks`, {
         status: res.status,
         statusText: res.statusText,

@@ -102,14 +102,30 @@ export async function GET(req: NextRequest) {
             // Not JSON
           }
           
-          console.error(`[API] Failed to fetch completed tasks in social tasks status`, {
-            status: completedRes.status,
-            statusText: completedRes.statusText,
-            url: completedUrl,
-            address: address.substring(0, 10) + "...",
-            responseText: errorText.substring(0, 500),
-            parsedError: parsedError,
-          });
+          // Check if this is the DynamoDB filter expression error
+          const errorMessage = parsedError?.error || errorText || "";
+          const isDynamoDBFilterError = 
+            typeof errorMessage === "string" && 
+            errorMessage.includes("Filter Expression can only contain non-primary key attributes") &&
+            errorMessage.includes("completionKey");
+          
+          if (isDynamoDBFilterError) {
+            // Gracefully handle: just log warning and continue with empty completed tasks
+            console.warn(`[API] Detected DynamoDB filter expression error in social tasks status, using empty completed tasks`, {
+              address: address.substring(0, 10) + "...",
+              url: completedUrl,
+            });
+            completedTaskIds = new Set(); // Already empty, but explicit
+          } else {
+            console.error(`[API] Failed to fetch completed tasks in social tasks status`, {
+              status: completedRes.status,
+              statusText: completedRes.statusText,
+              url: completedUrl,
+              address: address.substring(0, 10) + "...",
+              responseText: errorText.substring(0, 500),
+              parsedError: parsedError,
+            });
+          }
         }
       } catch (error: any) {
         console.error("[API] Exception fetching completed tasks in social tasks status", {
