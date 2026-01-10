@@ -1,5 +1,8 @@
 import React from "react";
 
+// Force dynamic rendering since we're using searchParams and fetching fresh data
+export const dynamic = 'force-dynamic';
+
 type LeaderboardItem = {
   rank: number;
   userAddress: string;
