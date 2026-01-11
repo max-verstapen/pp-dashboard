@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useWeb3Auth, useWeb3AuthConnect, useWeb3AuthDisconnect, useSwitchChain } from "@web3auth/modal/react";
 import { useGlobalWallet } from "@/components/GlobalWalletProvider";
 import PixelButton from "@/components/PixelButton";
@@ -16,6 +17,7 @@ function shortenMiddle(value: string, keepStart = 6, keepEnd = 6): string {
 
 export default function ConnectWalletPage() {
 	const router = useRouter();
+	const { data: session } = useSession();
 	const { address, connected } = useGlobalWallet();
 	const { web3Auth } = useWeb3Auth();
 	const { switchChain, error: switchError, loading: switching } = useSwitchChain();
@@ -31,18 +33,100 @@ export default function ConnectWalletPage() {
 		error: disconnectError,
 	} = useWeb3AuthDisconnect();
 
-	// Redirect to home (which will show onboarding) after successful connection
+	const [debugInfo, setDebugInfo] = React.useState<string>("");
+	const [accountConflictError, setAccountConflictError] = React.useState<string | null>(null);
+	const [checkingAccount, setCheckingAccount] = React.useState(false);
+	const [hasCheckedAddress, setHasCheckedAddress] = React.useState<string | null>(null);
+
+	// Get social auth info from session
+	const googleEmail: string | null = (session as any)?.googleEmail ?? null;
+	const twitterUsername: string | null = (session as any)?.twitterUsername ?? null;
+	const discordUsername: string | null = (session as any)?.discordUsername ?? null;
+	const hasSocialAuth = !!(googleEmail || twitterUsername || discordUsername);
+
+	// Check if connected wallet address is already linked to another account
 	React.useEffect(() => {
-		if (isConnected && connected && address) {
+		async function checkAccountConflict() {
+			// Only check if wallet is connected and we have an address
+			if (!isConnected || !connected || !address) {
+				setAccountConflictError(null);
+				return;
+			}
+
+			// Don't check the same address twice
+			if (hasCheckedAddress === address) {
+				return;
+			}
+
+			// Only check if we have social auth connected
+			if (!hasSocialAuth) {
+				setHasCheckedAddress(address);
+				return;
+			}
+
+			setCheckingAccount(true);
+			setAccountConflictError(null);
+
+			try {
+				// Check if user exists by wallet address
+				const userRes = await fetch(`/api/user/${encodeURIComponent(address)}`, { cache: "no-store" });
+				
+				if (userRes.ok) {
+					const existingUser = await userRes.json();
+					const existingEmail = existingUser.email || existingUser.raw?.all?.email || null;
+					const existingXHandle = existingUser.xHandle || existingUser.raw?.all?.xHandle || existingUser.raw?.all?.['x-handle'] || null;
+					const existingDiscordHandle = existingUser.discordHandle || existingUser.raw?.all?.discordHandle || existingUser.raw?.all?.['discord-handle'] || null;
+
+					// Normalize handles for comparison
+					const normalizeXHandle = (handle: string | null) => {
+						if (!handle) return null;
+						return handle.startsWith("@") ? handle.slice(1).toLowerCase() : handle.toLowerCase();
+					};
+
+					const currentEmail = googleEmail?.toLowerCase().trim() || null;
+					const currentXHandle = twitterUsername ? normalizeXHandle(twitterUsername) : null;
+					const currentDiscordHandle = discordUsername?.toLowerCase().trim() || null;
+
+					// Check if the wallet is linked to the current account or a different account
+					const emailMatch = currentEmail && existingEmail && currentEmail === existingEmail.toLowerCase();
+					const xMatch = currentXHandle && existingXHandle && currentXHandle === normalizeXHandle(existingXHandle);
+					const discordMatch = currentDiscordHandle && existingDiscordHandle && currentDiscordHandle === existingDiscordHandle.toLowerCase();
+
+					// If wallet is linked to the current account (has matching social auth), no conflict
+					if (emailMatch || xMatch || discordMatch) {
+						// Wallet is already linked to current account, allow flow to continue
+						setAccountConflictError(null);
+						return;
+					}
+
+					// If wallet exists but doesn't match current social auth, it's linked to another account
+					if (existingEmail || existingXHandle || existingDiscordHandle) {
+						setAccountConflictError(`This wallet address is already connected to another account. Please disconnect and connect a different wallet, or use the account that this wallet is linked to.`);
+					}
+				}
+			} catch (error) {
+				console.error("[ConnectWalletPage] Error checking account conflict:", error);
+				// Don't show error to user, just log it
+			} finally {
+				setCheckingAccount(false);
+				setHasCheckedAddress(address);
+			}
+		}
+
+		checkAccountConflict();
+	}, [isConnected, connected, address, hasSocialAuth, googleEmail, twitterUsername, discordUsername, hasCheckedAddress]);
+
+	// Redirect to home (which will show onboarding) after successful connection
+	// Only redirect if there's no account conflict error
+	React.useEffect(() => {
+		if (isConnected && connected && address && !accountConflictError && !checkingAccount) {
 			// Small delay to ensure connection is fully established
 			const timer = setTimeout(() => {
 				router.push("/");
 			}, 500);
 			return () => clearTimeout(timer);
 		}
-	}, [isConnected, connected, address, router]);
-
-	const [debugInfo, setDebugInfo] = React.useState<string>("");
+	}, [isConnected, connected, address, router, accountConflictError, checkingAccount]);
 
 	const currentChain = web3Auth?.currentChain;
 	const chainNamespace = currentChain?.chainNamespace;
@@ -86,7 +170,34 @@ export default function ConnectWalletPage() {
 				return;
 			}
 			
-			console.log("Attempting to connect...", { web3Auth, isConnected });
+			// CRITICAL: Ensure chain is set BEFORE opening the connection modal
+			// This is especially important for external wallets like Phantom
+			const currentChain = web3Auth.currentChain;
+			const chainNamespace = currentChain?.chainNamespace;
+			const chainId = currentChain?.chainId;
+			
+			console.log("Pre-connection chain check:", { 
+				currentChain, 
+				chainNamespace, 
+				chainId,
+				needsChainSet: !chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3"
+			});
+
+			// If chain is null or not on Solana Devnet, set it BEFORE connecting
+			if (!chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3") {
+				setDebugInfo("Setting chain to Solana Devnet before connection...");
+				try {
+					await switchChain("0x3");
+					// Wait a bit to ensure chain is fully set
+					await new Promise(resolve => setTimeout(resolve, 200));
+					console.log("Chain set to Solana Devnet before connection");
+				} catch (switchError) {
+					console.error("Failed to set chain before connection:", switchError);
+					setDebugInfo(`Error setting chain: ${switchError instanceof Error ? switchError.message : String(switchError)}`);
+					// Continue anyway - might still work
+				}
+			}
+			
 			setDebugInfo("Opening connection modal...");
 			
 			const result = await connect();
@@ -249,6 +360,27 @@ export default function ConnectWalletPage() {
 									</div>
 									<div className="text-xs text-blue-300">
 										Client ID: {process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID ? "Set" : "Missing"}
+									</div>
+								</div>
+							)}
+
+							{/* Account Conflict Error */}
+							{accountConflictError && (
+								<div className="flex flex-col gap-2 rounded border border-red-500/50 bg-red-500/10 p-3">
+									<label className="text-sm font-semibold uppercase text-red-300">
+										Account Conflict
+									</label>
+									<div className="text-sm text-red-300">
+										{accountConflictError}
+									</div>
+								</div>
+							)}
+
+							{/* Checking Account Status */}
+							{checkingAccount && (
+								<div className="flex flex-col gap-2 rounded border border-yellow-500/50 bg-yellow-500/10 p-3">
+									<div className="text-sm text-yellow-300">
+										Checking account status...
 									</div>
 								</div>
 							)}

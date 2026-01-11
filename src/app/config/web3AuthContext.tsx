@@ -11,7 +11,7 @@ const web3AuthContextConfig: Web3AuthContextConfig = {
     chains: [
       {
         chainNamespace: CHAIN_NAMESPACES.SOLANA,
-        chainId: "0x3", // Solana Devnet
+        chainId: "0x3", // Solana Devnet (per MetaMask/Web3Auth docs: 0x1=mainnet, 0x2=testnet, 0x3=devnet)
         rpcTarget: "https://api.devnet.solana.com",
         displayName: "Solana Devnet",
         ticker: "SOL",
@@ -44,6 +44,9 @@ const web3AuthContextConfig: Web3AuthContextConfig = {
           showOnModal: true,
         },
       },
+      // Explicitly enable external wallet discovery (e.g., Phantom, Solflare, etc.)
+      // Set to false to show external wallets in the connection modal
+      hideWalletDiscovery: false,
     },
   },
 };

@@ -120,6 +120,7 @@ export default function RightTabsPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("My Stats");
   const { address: globalWalletAddress } = useGlobalWallet();
   const { userInfo } = useWeb3AuthUser();
+  const { data: session } = useSession();
 
   // Clear expired caches on mount and set up interval
   useEffect(() => {
@@ -156,7 +157,7 @@ export default function RightTabsPanel() {
     }
   }, [addressForApi, checkedAddress]);
 
-  // Check if user exists; if not, we'll restrict all tabs except Leaderboard
+  // Check if user exists; if not, check by email/X/Discord and link if found
   useEffect(() => {
     let cancelled = false;
     
@@ -170,6 +171,7 @@ export default function RightTabsPanel() {
       if (!addressForApi) return;
       
       try {
+        // First, check if user exists by wallet address
         const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}`, { cache: "no-store" });
         
         if (cancelled) return;
@@ -179,8 +181,68 @@ export default function RightTabsPanel() {
         
         if (res.ok) {
           setUserExists(true);
-        } else if (res.status === 403 || res.status === 404) {
-          // 403 or 404 means user doesn't exist - don't retry
+          return;
+        } 
+        
+        // If user doesn't exist by wallet address, check if user exists by email/X/Discord
+        if (res.status === 403 || res.status === 404) {
+          const googleEmail: string | null = (session as any)?.googleEmail ?? null;
+          const twitterUsername: string | null = (session as any)?.twitterUsername ?? null;
+          const discordUsername: string | null = (session as any)?.discordUsername ?? null;
+          
+          let existingUser: any = null;
+          
+          // Check by email first
+          if (googleEmail) {
+            try {
+              const emailRes = await fetch(`/api/user/by-email/${encodeURIComponent(googleEmail.toLowerCase().trim())}`, { cache: "no-store" });
+              if (emailRes.ok) {
+                existingUser = await emailRes.json();
+                console.log("[RightTabsPanel] Found existing user by email, linking wallet...");
+              }
+            } catch (error) {
+              console.error("[RightTabsPanel] Error checking user by email:", error);
+            }
+          }
+          
+          // Check by X handle if not found by email
+          if (!existingUser && twitterUsername) {
+            try {
+              const normalizedTwitter = twitterUsername.startsWith("@") ? twitterUsername.slice(1) : twitterUsername;
+              const xRes = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter.trim())}`, { cache: "no-store" });
+              if (xRes.ok) {
+                existingUser = await xRes.json();
+                console.log("[RightTabsPanel] Found existing user by X handle, linking wallet...");
+              }
+            } catch (error) {
+              console.error("[RightTabsPanel] Error checking user by X handle:", error);
+            }
+          }
+          
+          // Check by Discord if not found by email or X
+          if (!existingUser && discordUsername) {
+            try {
+              const discordRes = await fetch(`/api/user/by-discord/${encodeURIComponent(discordUsername.trim())}`, { cache: "no-store" });
+              if (discordRes.ok) {
+                existingUser = await discordRes.json();
+                console.log("[RightTabsPanel] Found existing user by Discord handle, linking wallet...");
+              }
+            } catch (error) {
+              console.error("[RightTabsPanel] Error checking user by Discord handle:", error);
+            }
+          }
+          
+          // If user exists by social auth, link the wallet to that user
+          if (existingUser && existingUser.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
+            // User exists but with different wallet address - this means we need to link the new wallet
+            // The backend should handle updating the wallet address, but we'll mark userExists=true
+            // since the user record exists (just needs wallet linking)
+            console.log("[RightTabsPanel] User exists by social auth, wallet will be linked via sync");
+            setUserExists(true);
+            return;
+          }
+          
+          // User doesn't exist by wallet or social auth
           setUserExists(false);
         } else {
           // Other errors - don't retry, assume false
@@ -199,7 +261,7 @@ export default function RightTabsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [addressForApi, checkedAddress]);
+  }, [addressForApi, checkedAddress, session]);
 
   // If user doesn't exist, show create user flow instead of forcing Leaderboard
   useEffect(() => {
@@ -327,7 +389,7 @@ function MyStatsContent() {
   const currentPP = 4200;
   const referrals = 7;
 
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { address: globalWalletAddress, connected: globalWalletConnected } = useGlobalWallet();
   const { connect: connectWallet, loading: walletConnectLoading } = useWeb3AuthConnect();
   const rawAdapterPk = useMemo(() => null as string | null, []);
@@ -1010,9 +1072,47 @@ function MyStatsContent() {
   const isLoading = (apiLoading || socialLoading) && isInitialLoad && !apiUser;
   const isRefreshing = (apiLoading || socialLoading) && !isInitialLoad && !!apiUser;
 
+  // Handle disconnect all accounts
+  const handleDisconnectAll = async () => {
+    try {
+      // Clear all cache first
+      if (typeof window !== "undefined") {
+        try {
+          // Clear all localStorage cache
+          window.localStorage.clear();
+        } catch {
+          // ignore localStorage errors
+        }
+        
+        // Clear all sessionStorage cache
+        try {
+          window.sessionStorage.clear();
+        } catch {
+          // ignore sessionStorage errors
+        }
+      }
+      
+      // Sign out of all NextAuth providers (disconnects all social accounts)
+      await signOut({ callbackUrl: "/" });
+    } catch (error) {
+      console.error("[MyStats] Error disconnecting all accounts:", error);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 text-zinc-100/90 h-full flex flex-col relative">
-      <h2 className="text-2xl md:text-3xl drop-shadow font-bold mb-4">My Stats</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl md:text-3xl drop-shadow font-bold">My Stats</h2>
+        <button
+          type="button"
+          onClick={handleDisconnectAll}
+          className="pixel-chip pixel-chip--entry"
+          style={{ cursor: "pointer" }}
+          title="Disconnect all accounts and clear cache"
+        >
+          <span className="pixel-chip__text">Disconnect</span>
+        </button>
+      </div>
 
       {/* Loading overlay */}
       {isLoading && (
@@ -1082,6 +1182,20 @@ function MyStatsContent() {
                       className="pixel-chip pixel-chip--entry"
                       onClick={async () => {
                         try {
+                          // First, check if this email is already linked to another user
+                          const checkRes = await fetch(`/api/user/by-email/${encodeURIComponent(googleEmail.toLowerCase().trim())}`, { cache: "no-store" });
+                          if (checkRes.ok) {
+                            const existingUser = await checkRes.json();
+                            if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
+                              // Email is linked to another account
+                              const otherUsername = existingUser.username || existingUser.user?.username || "another user";
+                              alert(`Cannot link this Google/email account. It is already linked to another account (@${otherUsername}).`);
+                              return;
+                            }
+                            // Same address, so it's already linked - shouldn't happen but allow update
+                          }
+                          
+                          // Link the email to current user
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/email`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
@@ -1103,9 +1217,13 @@ function MyStatsContent() {
                               setApiUser(refetchData || null);
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
+                          } else {
+                            const errorData = await res.json().catch(() => ({}));
+                            alert(errorData.error || "Failed to link Google/email account. Please try again.");
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking email:", error);
+                          alert("An error occurred while linking Google/email account. Please try again.");
                         }
                       }}
                     >
@@ -1140,10 +1258,27 @@ function MyStatsContent() {
                       className="pixel-chip pixel-chip--entry"
                       onClick={async () => {
                         try {
+                          // Normalize X handle (remove @ if present)
+                          const normalizedTwitter = effectiveTwitter.startsWith("@") ? effectiveTwitter.slice(1) : effectiveTwitter;
+                          
+                          // First, check if this X handle is already linked to another user
+                          const checkRes = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter.trim())}`, { cache: "no-store" });
+                          if (checkRes.ok) {
+                            const existingUser = await checkRes.json();
+                            if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
+                              // X handle is linked to another account
+                              const otherUsername = existingUser.username || existingUser.user?.username || "another user";
+                              alert(`Cannot link this X/Twitter account. It is already linked to another account (@${otherUsername}).`);
+                              return;
+                            }
+                            // Same address, so it's already linked - shouldn't happen but allow update
+                          }
+                          
+                          // Link the X handle to current user
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/x-handle`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ xHandle: effectiveTwitter }),
+                            body: JSON.stringify({ xHandle: normalizedTwitter }),
                           });
                           if (res.ok) {
                             setDidSyncX(true);
@@ -1161,9 +1296,13 @@ function MyStatsContent() {
                               setApiUser(refetchData || null);
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
+                          } else {
+                            const errorData = await res.json().catch(() => ({}));
+                            alert(errorData.error || "Failed to link X/Twitter account. Please try again.");
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking X handle:", error);
+                          alert("An error occurred while linking X/Twitter account. Please try again.");
                         }
                       }}
                       style={{ cursor: "pointer" }}
@@ -1202,6 +1341,20 @@ function MyStatsContent() {
                       className="pixel-chip pixel-chip--entry"
                       onClick={async () => {
                         try {
+                          // First, check if this Discord handle is already linked to another user
+                          const checkRes = await fetch(`/api/user/by-discord/${encodeURIComponent(effectiveDiscord.trim())}`, { cache: "no-store" });
+                          if (checkRes.ok) {
+                            const existingUser = await checkRes.json();
+                            if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
+                              // Discord handle is linked to another account
+                              const otherUsername = existingUser.username || existingUser.user?.username || "another user";
+                              alert(`Cannot link this Discord account. It is already linked to another account (@${otherUsername}).`);
+                              return;
+                            }
+                            // Same address, so it's already linked - shouldn't happen but allow update
+                          }
+                          
+                          // Link the Discord handle to current user
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/discord-handle`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
@@ -1223,9 +1376,13 @@ function MyStatsContent() {
                               setApiUser(refetchData || null);
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
+                          } else {
+                            const errorData = await res.json().catch(() => ({}));
+                            alert(errorData.error || "Failed to link Discord account. Please try again.");
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking Discord handle:", error);
+                          alert("An error occurred while linking Discord account. Please try again.");
                         }
                       }}
                       style={{ cursor: "pointer" }}
@@ -1258,15 +1415,6 @@ function MyStatsContent() {
                   <div className="pixel-chip pixel-chip--entry pixel-chip--no-bg">
                     <span className="pixel-chip__text">{shortenMiddle(addressForApi, 4, 4)}</span>
                   </div>
-                  <button
-                    type="button"
-                    className="pixel-chip pixel-chip--entry"
-                    onClick={handleUnifiedDisconnect}
-                    style={{ cursor: "pointer" }}
-                    title="Disconnect wallet"
-                  >
-                    <span className="pixel-chip__text">Disconnect</span>
-                  </button>
                 </div>
               ) : (
                 <button
@@ -1275,6 +1423,8 @@ function MyStatsContent() {
                   onClick={async () => {
                     try {
                       await connectWallet();
+                      // Refresh session after wallet connection to ensure linked accounts persist
+                      await updateSession();
                     } catch (error) {
                       console.error("[MyStats] Wallet connection error:", error);
                     }
@@ -2147,6 +2297,9 @@ function CreateUserFlow({ walletAddress, onUserCreated, onCancel }: CreateUserFl
     try {
       setError(null);
       await connectWallet();
+      // Refresh session after wallet connection to ensure linked accounts persist
+      // Note: updateSession is from MyStatsContent's useSession, but we don't have direct access here
+      // The session should refresh automatically via refetchOnWindowFocus
     } catch (err) {
       setError("Failed to connect wallet. Please try again.");
       console.error("[CreateUserFlow] Wallet connection error:", err);

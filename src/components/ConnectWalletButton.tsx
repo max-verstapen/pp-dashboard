@@ -70,12 +70,37 @@ export default function ConnectWalletButton() {
 		);
 	}
 
+	const handleConnect = async () => {
+		try {
+			// Ensure chain is set before connecting (critical for external wallets like Phantom)
+			const currentChain = web3Auth?.currentChain;
+			const chainNamespace = currentChain?.chainNamespace;
+			const chainId = currentChain?.chainId;
+			
+			if (!chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3") {
+				console.log("[ConnectWalletButton] Setting chain to Solana Devnet before connection...");
+				try {
+					await switchChain("0x3");
+					// Wait a bit to ensure chain is fully set
+					await new Promise(resolve => setTimeout(resolve, 200));
+				} catch (switchError) {
+					console.warn("[ConnectWalletButton] Failed to set chain before connection:", switchError);
+					// Continue anyway - might still work
+				}
+			}
+			
+			await connect();
+		} catch (error) {
+			console.error("[ConnectWalletButton] Connection error:", error);
+		}
+	};
+
 	return (
 		<div className="flex items-center gap-2">
 			<PixelButton
 				variant="tab"
 				size="sm"
-				onClick={() => connect()}
+				onClick={handleConnect}
 				disabled={connectLoading}
 			>
 				{connectLoading ? "Connecting..." : "Connect Wallet"}

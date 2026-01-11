@@ -29,6 +29,62 @@ export default function GlobalWalletProvider({ children }: Props) {
 	const [address, setAddress] = React.useState<string | null>(null);
 	const [apiAddress, setApiAddress] = React.useState<string | null>(null);
 
+	// Initialize chain as soon as Web3Auth is ready (before any connection)
+	// This is CRITICAL for external wallet connections like Phantom
+	// The chain must be set before the modal opens, otherwise external wallets will fail with "Chain null not supported"
+	React.useEffect(() => {
+		if (!web3Auth || !switchChain) return;
+
+		// Use a small delay to ensure Web3Auth is fully initialized
+		const initChain = async () => {
+			// Check if chain is null or not set to Solana Devnet
+			const currentChain = web3Auth.currentChain;
+			const chainNamespace = currentChain?.chainNamespace;
+			const chainId = currentChain?.chainId;
+
+			console.log("[GlobalWalletProvider] Checking chain on initialization...", { 
+				currentChain, 
+				chainNamespace, 
+				chainId,
+				web3AuthReady: !!web3Auth
+			});
+
+			// If chain is null or not on Solana Devnet, set it immediately
+			if (!chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3") {
+				try {
+					console.log("[GlobalWalletProvider] Chain not set correctly, initializing to Solana Devnet...");
+					await switchChain("0x3");
+					// Verify it was set
+					await new Promise(resolve => setTimeout(resolve, 100));
+					const verifyChain = web3Auth.currentChain;
+					console.log("[GlobalWalletProvider] Chain initialized. Verification:", {
+						chainNamespace: verifyChain?.chainNamespace,
+						chainId: verifyChain?.chainId
+					});
+				} catch (error) {
+					console.warn("[GlobalWalletProvider] Failed to initialize chain:", error);
+					// Retry after a longer delay
+					setTimeout(async () => {
+						try {
+							console.log("[GlobalWalletProvider] Retrying chain initialization...");
+							await switchChain("0x3");
+							console.log("[GlobalWalletProvider] Chain initialized on retry");
+						} catch (retryError) {
+							console.error("[GlobalWalletProvider] Retry chain initialization failed:", retryError);
+						}
+					}, 500);
+				}
+			} else {
+				console.log("[GlobalWalletProvider] Chain already correctly set to Solana Devnet");
+			}
+		};
+
+		// Small delay to ensure Web3Auth is fully initialized
+		const timeoutId = setTimeout(initChain, 100);
+		
+		return () => clearTimeout(timeoutId);
+	}, [web3Auth, switchChain]);
+
 	// Listen for address from API (after social auth)
 	React.useEffect(() => {
 		const handleSetAddress = (event: Event) => {
@@ -65,6 +121,16 @@ export default function GlobalWalletProvider({ children }: Props) {
 				
 				// Ensure we're on the right chain before getting address
 				if (!chainNamespace) {
+					// Try to switch to the correct chain if it's null
+					if (web3Auth?.connected && switchChain) {
+						try {
+							await switchChain("0x3");
+							// Wait a bit for chain switch to complete
+							await new Promise(resolve => setTimeout(resolve, 300));
+						} catch (switchError) {
+							console.warn("[GlobalWalletProvider] Failed to switch chain during address fetch:", switchError);
+						}
+					}
 					if (retries > 0 && !cancelled) {
 						setTimeout(() => getAddress(retries - 1), 500);
 					}
@@ -124,24 +190,36 @@ export default function GlobalWalletProvider({ children }: Props) {
 		return () => {
 			cancelled = true;
 		};
-	}, [isConnected, web3Auth?.provider, web3Auth?.connected, web3Auth?.currentChain?.chainNamespace]);
+	}, [isConnected, web3Auth?.provider, web3Auth?.connected, web3Auth?.currentChain?.chainNamespace, switchChain]);
 
 	// Ensure active chain is Solana Devnet after login
 	React.useEffect(() => {
+		if (!isConnected || !web3Auth?.connected) return;
+		
 		const currentNs = web3Auth?.currentChain?.chainNamespace;
 		const currentId = web3Auth?.currentChain?.chainId;
-		if (!isConnected) return;
-		// If not on Solana Devnet (0x3), switch
-		if (currentNs !== CHAIN_NAMESPACES.SOLANA || currentId !== "0x3") {
+		
+		// If chain is null or not on Solana Devnet (0x3), switch immediately
+		if (!currentNs || !currentId || currentNs !== CHAIN_NAMESPACES.SOLANA || currentId !== "0x3") {
 			(async () => {
 				try {
+					// Wait a bit for Web3Auth to fully initialize
+					await new Promise(resolve => setTimeout(resolve, 100));
 					await switchChain("0x3");
-				} catch {
-					// ignore; user can switch via UI if needed
+				} catch (error) {
+					console.warn("[GlobalWalletProvider] Failed to switch chain:", error);
+					// Retry once after a short delay
+					setTimeout(async () => {
+						try {
+							await switchChain("0x3");
+						} catch (retryError) {
+							console.error("[GlobalWalletProvider] Retry switch chain failed:", retryError);
+						}
+					}, 500);
 				}
 			})();
 		}
-	}, [isConnected, web3Auth?.currentChain?.chainNamespace, web3Auth?.currentChain?.chainId, switchChain]);
+	}, [isConnected, web3Auth?.connected, web3Auth?.currentChain?.chainNamespace, web3Auth?.currentChain?.chainId, switchChain]);
 
 	// Use API address if available, otherwise use Web3Auth address
 	const effectiveAddress = apiAddress || address;

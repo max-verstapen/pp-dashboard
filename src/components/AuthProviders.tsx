@@ -7,7 +7,14 @@ type Props = {
 };
 
 export default function AuthProviders({ children }: Props) {
-	return <SessionProvider>{children}</SessionProvider>;
+	return (
+		<SessionProvider 
+			refetchInterval={0} // Disable automatic refetch, we'll handle it manually
+			refetchOnWindowFocus={true} // Refetch when window regains focus (e.g., after Web3Auth modal closes)
+		>
+			{children}
+		</SessionProvider>
+	);
 }
 
 
