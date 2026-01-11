@@ -28,11 +28,11 @@ export default function ConnectWalletButton() {
 		error: disconnectError,
 	} = useWeb3AuthDisconnect();
 
-	// If connected but not on Solana Devnet, offer a quick switch
+	// If connected but not on Solana Mainnet, offer a quick switch
 	const onWrongChain =
 		isConnected &&
 		(web3Auth?.currentChain?.chainNamespace !== CHAIN_NAMESPACES.SOLANA ||
-			web3Auth?.currentChain?.chainId !== "0x3");
+			web3Auth?.currentChain?.chainId !== "0x1");
 
 	if (isConnected) {
 		return (
@@ -45,7 +45,7 @@ export default function ConnectWalletButton() {
 					<PixelButton
 						variant="tab"
 						size="sm"
-						onClick={() => switchChain("0x3")}
+						onClick={() => switchChain("0x1")}
 						disabled={switching}
 					>
 						{switching ? "Switching..." : "Switch to Solana"}
@@ -70,12 +70,21 @@ export default function ConnectWalletButton() {
 		);
 	}
 
+	const handleConnect = async () => {
+		try {
+			console.log("Current chain before connect:", web3Auth?.currentChain);
+			await connect();
+		} catch (error) {
+			console.error("[ConnectWalletButton] Connection error:", error);
+		}
+	};
+
 	return (
 		<div className="flex items-center gap-2">
 			<PixelButton
 				variant="tab"
 				size="sm"
-				onClick={() => connect()}
+				onClick={handleConnect}
 				disabled={connectLoading}
 			>
 				{connectLoading ? "Connecting..." : "Connect Wallet"}

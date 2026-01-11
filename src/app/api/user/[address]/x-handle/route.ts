@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Linking endpoint for X/Twitter handle
+ * 
+ * IMPORTANT: This endpoint is for LINKING social accounts to EXISTING users only.
+ * It does NOT create new users. The user must already exist at the given address.
+ * 
+ * Note: The frontend should check if the X handle is already linked to another user
+ * before calling this endpoint. This endpoint just performs the linking.
+ * 
+ * - If user doesn't exist at address → returns 404
+ * - Otherwise → links the X handle to the user
+ */
 export async function PUT(
 	req: NextRequest,
 	context: { params: Promise<{ address: string }> }
@@ -25,10 +37,11 @@ export async function PUT(
 		);
 	}
 
-	// Check if x-handle is already linked to another user
+	// First, verify that the user exists at the given address
+	const base = baseUrl.replace(/\/+$/, "");
 	try {
-		const checkUrl = `${baseUrl.replace(/\/+$/, "")}/users/by-x/${encodeURIComponent(xHandle)}`;
-		const checkRes = await fetch(checkUrl, {
+		const userCheckUrl = `${base}/users/${encodeURIComponent(address)}`;
+		const userCheckRes = await fetch(userCheckUrl, {
 			method: "GET",
 			headers: {
 				accept: "application/json",
@@ -37,24 +50,22 @@ export async function PUT(
 			cache: "no-store",
 		});
 		
-		if (checkRes.ok) {
-			const existingUser = await checkRes.json().catch(() => null);
-			// If user exists and it's not the current user, prevent linking
-			if (existingUser?.address && existingUser.address.toLowerCase() !== address.toLowerCase()) {
-				return NextResponse.json(
-					{ error: "This X handle is already linked to another account" },
-					{ status: 409 }
-				);
-			}
+		if (!userCheckRes.ok) {
+			// User doesn't exist at this address - this endpoint is for linking only, not creating users
+			return NextResponse.json(
+				{ error: "User does not exist at this address. This endpoint is for linking social accounts to existing users only." },
+				{ status: 404 }
+			);
 		}
 	} catch (error) {
-		// If check fails, log but continue (don't block linking if lookup service is down)
-		console.error("[API] Error checking existing x-handle:", error);
+		console.error("[API] Error checking if user exists:", error);
+		return NextResponse.json(
+			{ error: "Failed to verify user exists" },
+			{ status: 502 }
+		);
 	}
 
-	const target = `${baseUrl.replace(/\/+$/, "")}/users/${encodeURIComponent(
-		address
-	)}/x-handle`;
+	const target = `${base}/users/${encodeURIComponent(address)}/x-handle`;
 
 	try {
 		const res = await fetch(target, {

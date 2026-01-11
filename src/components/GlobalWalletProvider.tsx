@@ -1,8 +1,7 @@
 "use client";
 import React from "react";
 import { useWeb3Auth, useWeb3AuthConnect, useSwitchChain } from "@web3auth/modal/react";
-import { CHAIN_NAMESPACES, getED25519Key } from "@web3auth/modal";
-import { Keypair } from "@solana/web3.js";
+import { CHAIN_NAMESPACES } from "@web3auth/modal";
 
 type GlobalWalletState = {
 	address: string | null;
@@ -63,7 +62,7 @@ export default function GlobalWalletProvider({ children }: Props) {
 				const provider = web3Auth.provider;
 				const chainNamespace = web3Auth.currentChain?.chainNamespace;
 				
-				// Ensure we're on the right chain before getting address
+				// If chain namespace is not available, retry (don't try to switch before connection)
 				if (!chainNamespace) {
 					if (retries > 0 && !cancelled) {
 						setTimeout(() => getAddress(retries - 1), 500);
@@ -72,31 +71,37 @@ export default function GlobalWalletProvider({ children }: Props) {
 				}
 				
 				if (chainNamespace === CHAIN_NAMESPACES.SOLANA) {
-					// For Solana, get private key and derive address
+					// For Solana, try getAccounts first, then fallback to getPublicKey
 					try {
-						const privateKey = await provider.request<never, string>({
-							method: "private_key",
+						// Try getAccounts first (most reliable for Solana)
+						const accounts = await provider.request<never, string[]>({
+							method: "getAccounts",
 						});
 						
-						if (!cancelled && privateKey) {
-							// Convert private key to Solana keypair
-							const ed25519Key = getED25519Key(privateKey);
-							const secretKey = new Uint8Array(Buffer.from(ed25519Key.sk.toString("hex"), "hex"));
-							const keypair = Keypair.fromSecretKey(secretKey);
-							const solanaAddress = keypair.publicKey.toBase58();
-							
-							if (!cancelled) {
-								setAddress(solanaAddress);
-							}
+						if (!cancelled && accounts && accounts.length > 0 && accounts[0]) {
+							setAddress(accounts[0]);
+							return;
 						}
-					} catch (privateKeyError: any) {
-						// If private_key method fails, retry a few times
-						if (retries > 0 && !cancelled && privateKeyError?.code === -32603) {
-							console.debug("[GlobalWalletProvider] Retrying private_key request...", retries);
-							setTimeout(() => getAddress(retries - 1), 1000);
-						} else {
-							console.error("[GlobalWalletProvider] Error getting private key:", privateKeyError);
-							if (!cancelled) setAddress(null);
+					} catch (accountsError: any) {
+						// If getAccounts fails, try getPublicKey
+						try {
+							const publicKey = await provider.request<never, string>({
+								method: "getPublicKey",
+							});
+							
+							if (!cancelled && publicKey) {
+								setAddress(publicKey);
+								return;
+							}
+						} catch (publicKeyError: any) {
+							// If both fail, retry if retries available
+							if (retries > 0 && !cancelled) {
+								console.debug("[GlobalWalletProvider] Both getAccounts and getPublicKey failed, retrying...", retries);
+								setTimeout(() => getAddress(retries - 1), 1000);
+							} else {
+								console.error("[GlobalWalletProvider] Error getting Solana address:", publicKeyError || accountsError);
+								if (!cancelled) setAddress(null);
+							}
 						}
 					}
 				} else {
@@ -126,22 +131,19 @@ export default function GlobalWalletProvider({ children }: Props) {
 		};
 	}, [isConnected, web3Auth?.provider, web3Auth?.connected, web3Auth?.currentChain?.chainNamespace]);
 
-	// Ensure active chain is Solana Devnet after login
+	// Ensure active chain is Solana Mainnet after connection (ONLY post-connect)
 	React.useEffect(() => {
+		if (!isConnected || !web3Auth?.connected || !switchChain) return;
+		
 		const currentNs = web3Auth?.currentChain?.chainNamespace;
-		const currentId = web3Auth?.currentChain?.chainId;
-		if (!isConnected) return;
-		// If not on Solana Devnet (0x3), switch
-		if (currentNs !== CHAIN_NAMESPACES.SOLANA || currentId !== "0x3") {
-			(async () => {
-				try {
-					await switchChain("0x3");
-				} catch {
-					// ignore; user can switch via UI if needed
-				}
-			})();
+		
+		// Only switch if connected and not on Solana
+		if (currentNs !== CHAIN_NAMESPACES.SOLANA) {
+			switchChain("0x1").catch((error) => {
+				console.warn("[GlobalWalletProvider] Failed to switch chain:", error);
+			});
 		}
-	}, [isConnected, web3Auth?.currentChain?.chainNamespace, web3Auth?.currentChain?.chainId, switchChain]);
+	}, [isConnected, web3Auth?.connected, web3Auth?.currentChain?.chainNamespace, switchChain]);
 
 	// Use API address if available, otherwise use Web3Auth address
 	const effectiveAddress = apiAddress || address;

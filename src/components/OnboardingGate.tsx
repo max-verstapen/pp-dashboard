@@ -47,7 +47,7 @@ function setCachedJson<T>(key: string, value: T) {
 
 export default function OnboardingGate({ children }: Props) {
 	const pathname = usePathname();
-	const { data: session } = useSession();
+	const { data: session, update: updateSession } = useSession();
 	const gw = useGlobalWallet();
 	const { connect: connectWallet, loading: walletConnectLoading } = useWeb3AuthConnect();
 	const [cachedGoogle, setCachedGoogle] = useState<string | null>(null);
@@ -86,6 +86,14 @@ export default function OnboardingGate({ children }: Props) {
 
 			// Need at least one auth method to fetch address
 			if (!effectiveGoogle && !effectiveTwitter && !effectiveDiscord) return;
+
+			// Check if user has a saved wallet address (they want to link, not switch accounts)
+			const savedWalletAddress = typeof window !== "undefined" 
+				? window.localStorage.getItem("pp_last_wallet_address") 
+				: null;
+			// If user has a saved wallet address, they're trying to link, not switch accounts
+			// So don't auto-switch to the account that owns the social handle
+			if (savedWalletAddress) return;
 
 			// Normalize identifiers to match upstream expectations
 			const normalizedGoogle = effectiveGoogle?.toLowerCase().trim() || null;
@@ -128,8 +136,9 @@ export default function OnboardingGate({ children }: Props) {
 
 			try {
 				let userData: any = null;
+				let userDataByGoogle: any = null;
 
-		// Try Google email first (send raw value; upstream API expects literal '@')
+				// Try Google email first (send raw value; upstream API expects literal '@')
 				if (normalizedGoogle) {
 					try {
 						const res = await fetch(`/api/user/by-email/${normalizedGoogle}`, {
@@ -140,6 +149,7 @@ export default function OnboardingGate({ children }: Props) {
 							// eslint-disable-next-line no-console
 							console.info("[OnboardingGate] /by-email response", json);
 							userData = json;
+							userDataByGoogle = json;
 						}
 					} catch (error) {
 						// eslint-disable-next-line no-console
@@ -147,39 +157,97 @@ export default function OnboardingGate({ children }: Props) {
 					}
 				}
 
-				// Try X handle if no user found yet
-				if (!userData && normalizedTwitter) {
-					try {
-						const res = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter)}`, {
-							cache: "no-store",
-						});
-						if (res.ok) {
-							const json = await res.json();
-							// eslint-disable-next-line no-console
-							console.info("[OnboardingGate] /by-x response", json);
-							userData = json;
-						}
-					} catch (error) {
-						// eslint-disable-next-line no-console
-						console.error("[OnboardingGate] Error fetching user by X handle:", error);
-					}
-				}
+				// Get the address from Google account if found
+				const googleAccountAddress = userDataByGoogle?.userAddress ||
+					userDataByGoogle?.address ||
+					userDataByGoogle?.walletAddress ||
+					userDataByGoogle?.wallet_address ||
+					userDataByGoogle?.user?.address ||
+					userDataByGoogle?.user?.walletAddress ||
+					userDataByGoogle?.user?.wallet_address ||
+					null;
 
-				// Try Discord handle if no user found yet
-				if (!userData && normalizedDiscord) {
-					try {
-						const res = await fetch(`/api/user/by-discord/${encodeURIComponent(normalizedDiscord)}`, {
-							cache: "no-store",
-						});
-						if (res.ok) {
-							const json = await res.json();
-							// eslint-disable-next-line no-console
-							console.info("[OnboardingGate] /by-discord response", json);
-							userData = json;
+				// If user has Google account, check X/Discord but don't switch if they belong to different account
+				if (googleAccountAddress && (normalizedTwitter || normalizedDiscord)) {
+					// User already has an account via Google - check if X/Discord belongs to same account
+					if (normalizedTwitter && !userData) {
+						try {
+							const res = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter)}`, {
+								cache: "no-store",
+							});
+							if (res.ok) {
+								const json = await res.json();
+								const xAccountAddress = json?.userAddress || json?.address || json?.walletAddress || json?.wallet_address || json?.user?.address || json?.user?.walletAddress || json?.user?.wallet_address || null;
+								// Only use X account if it's the same as Google account
+								if (xAccountAddress && xAccountAddress.toLowerCase() === googleAccountAddress.toLowerCase()) {
+									userData = json;
+								}
+								// If X belongs to different account, don't switch - user is trying to link
+							}
+						} catch (error) {
+							console.error("[OnboardingGate] Error fetching user by X handle:", error);
 						}
-					} catch (error) {
-						// eslint-disable-next-line no-console
-						console.error("[OnboardingGate] Error fetching user by Discord handle:", error);
+					}
+
+					if (normalizedDiscord && !userData) {
+						try {
+							const res = await fetch(`/api/user/by-discord/${encodeURIComponent(normalizedDiscord)}`, {
+								cache: "no-store",
+							});
+							if (res.ok) {
+								const json = await res.json();
+								const discordAccountAddress = json?.userAddress || json?.address || json?.walletAddress || json?.wallet_address || json?.user?.address || json?.user?.walletAddress || json?.user?.wallet_address || null;
+								// Only use Discord account if it's the same as Google account
+								if (discordAccountAddress && discordAccountAddress.toLowerCase() === googleAccountAddress.toLowerCase()) {
+									userData = json;
+								}
+								// If Discord belongs to different account, don't switch - user is trying to link
+							}
+						} catch (error) {
+							console.error("[OnboardingGate] Error fetching user by Discord handle:", error);
+						}
+					}
+
+					// Use Google account data since user already has an account
+					if (!userData) {
+						userData = userDataByGoogle;
+					}
+				} else {
+					// No Google account or no X/Discord - normal lookup flow
+					// Try X handle if no user found yet
+					if (!userData && normalizedTwitter) {
+						try {
+							const res = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter)}`, {
+								cache: "no-store",
+							});
+							if (res.ok) {
+								const json = await res.json();
+								// eslint-disable-next-line no-console
+								console.info("[OnboardingGate] /by-x response", json);
+								userData = json;
+							}
+						} catch (error) {
+							// eslint-disable-next-line no-console
+							console.error("[OnboardingGate] Error fetching user by X handle:", error);
+						}
+					}
+
+					// Try Discord handle if no user found yet
+					if (!userData && normalizedDiscord) {
+						try {
+							const res = await fetch(`/api/user/by-discord/${encodeURIComponent(normalizedDiscord)}`, {
+								cache: "no-store",
+							});
+							if (res.ok) {
+								const json = await res.json();
+								// eslint-disable-next-line no-console
+								console.info("[OnboardingGate] /by-discord response", json);
+								userData = json;
+							}
+						} catch (error) {
+							// eslint-disable-next-line no-console
+							console.error("[OnboardingGate] Error fetching user by Discord handle:", error);
+						}
 					}
 				}
 
@@ -370,16 +438,26 @@ export default function OnboardingGate({ children }: Props) {
 			// Sync Google email
 			if (effectiveGoogle) {
 				try {
-					await fetch(`/api/user/${encodeURIComponent(addr)}/email`, {
+					const res = await fetch(`/api/user/${encodeURIComponent(addr)}/email`, {
 						method: "PUT",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ email: effectiveGoogle }),
 					});
-					// Restore wallet address if we used localStorage address
-					if (!effectiveAddress && addr) {
-						window.dispatchEvent(new CustomEvent("setUserAddress", {
-							detail: addr,
-						}));
+					if (!res.ok) {
+						const errorData = await res.json().catch(() => ({}));
+						if (res.status === 409) {
+							console.error("[OnboardingGate] Email already linked to another account:", errorData.error);
+							// Don't auto-switch to that account - user is trying to link to current account
+						} else {
+							console.error("[OnboardingGate] Error syncing email:", errorData);
+						}
+					} else {
+						// Restore wallet address if we used localStorage address
+						if (!effectiveAddress && addr) {
+							window.dispatchEvent(new CustomEvent("setUserAddress", {
+								detail: addr,
+							}));
+						}
 					}
 				} catch (error) {
 					console.error("[OnboardingGate] Error syncing email:", error);
@@ -389,16 +467,26 @@ export default function OnboardingGate({ children }: Props) {
 			// Sync X handle
 			if (effectiveTwitter) {
 				try {
-					await fetch(`/api/user/${encodeURIComponent(addr)}/x-handle`, {
+					const res = await fetch(`/api/user/${encodeURIComponent(addr)}/x-handle`, {
 						method: "PUT",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ xHandle: effectiveTwitter }),
 					});
-					// Restore wallet address if we used localStorage address
-					if (!effectiveAddress && addr) {
-						window.dispatchEvent(new CustomEvent("setUserAddress", {
-							detail: addr,
-						}));
+					if (!res.ok) {
+						const errorData = await res.json().catch(() => ({}));
+						if (res.status === 409) {
+							console.error("[OnboardingGate] X handle already linked to another account:", errorData.error);
+							// Don't auto-switch to that account - user is trying to link to current account
+						} else {
+							console.error("[OnboardingGate] Error syncing X handle:", errorData);
+						}
+					} else {
+						// Restore wallet address if we used localStorage address
+						if (!effectiveAddress && addr) {
+							window.dispatchEvent(new CustomEvent("setUserAddress", {
+								detail: addr,
+							}));
+						}
 					}
 				} catch (error) {
 					console.error("[OnboardingGate] Error syncing X handle:", error);
@@ -408,16 +496,26 @@ export default function OnboardingGate({ children }: Props) {
 			// Sync Discord handle
 			if (effectiveDiscord) {
 				try {
-					await fetch(`/api/user/${encodeURIComponent(addr)}/discord-handle`, {
+					const res = await fetch(`/api/user/${encodeURIComponent(addr)}/discord-handle`, {
 						method: "PUT",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ discordHandle: effectiveDiscord }),
 					});
-					// Restore wallet address if we used localStorage address
-					if (!effectiveAddress && addr) {
-						window.dispatchEvent(new CustomEvent("setUserAddress", {
-							detail: addr,
-						}));
+					if (!res.ok) {
+						const errorData = await res.json().catch(() => ({}));
+						if (res.status === 409) {
+							console.error("[OnboardingGate] Discord handle already linked to another account:", errorData.error);
+							// Don't auto-switch to that account - user is trying to link to current account
+						} else {
+							console.error("[OnboardingGate] Error syncing Discord handle:", errorData);
+						}
+					} else {
+						// Restore wallet address if we used localStorage address
+						if (!effectiveAddress && addr) {
+							window.dispatchEvent(new CustomEvent("setUserAddress", {
+								detail: addr,
+							}));
+						}
 					}
 				} catch (error) {
 					console.error("[OnboardingGate] Error syncing Discord handle:", error);
@@ -445,6 +543,8 @@ export default function OnboardingGate({ children }: Props) {
 	const handleWalletConnect = async () => {
 		try {
 			await connectWallet();
+			// Refresh session after wallet connection to ensure linked accounts persist
+			await updateSession();
 		} catch (error) {
 			console.error("[OnboardingGate] Wallet connection error:", error);
 		}

@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useWeb3Auth, useWeb3AuthConnect, useWeb3AuthDisconnect, useSwitchChain } from "@web3auth/modal/react";
 import { useGlobalWallet } from "@/components/GlobalWalletProvider";
 import PixelButton from "@/components/PixelButton";
@@ -16,6 +17,7 @@ function shortenMiddle(value: string, keepStart = 6, keepEnd = 6): string {
 
 export default function ConnectWalletPage() {
 	const router = useRouter();
+	const { data: session } = useSession();
 	const { address, connected } = useGlobalWallet();
 	const { web3Auth } = useWeb3Auth();
 	const { switchChain, error: switchError, loading: switching } = useSwitchChain();
@@ -31,18 +33,100 @@ export default function ConnectWalletPage() {
 		error: disconnectError,
 	} = useWeb3AuthDisconnect();
 
-	// Redirect to home (which will show onboarding) after successful connection
+	const [debugInfo, setDebugInfo] = React.useState<string>("");
+	const [accountConflictError, setAccountConflictError] = React.useState<string | null>(null);
+	const [checkingAccount, setCheckingAccount] = React.useState(false);
+	const [hasCheckedAddress, setHasCheckedAddress] = React.useState<string | null>(null);
+
+	// Get social auth info from session
+	const googleEmail: string | null = (session as any)?.googleEmail ?? null;
+	const twitterUsername: string | null = (session as any)?.twitterUsername ?? null;
+	const discordUsername: string | null = (session as any)?.discordUsername ?? null;
+	const hasSocialAuth = !!(googleEmail || twitterUsername || discordUsername);
+
+	// Check if connected wallet address is already linked to another account
 	React.useEffect(() => {
-		if (isConnected && connected && address) {
+		async function checkAccountConflict() {
+			// Only check if wallet is connected and we have an address
+			if (!isConnected || !connected || !address) {
+				setAccountConflictError(null);
+				return;
+			}
+
+			// Don't check the same address twice
+			if (hasCheckedAddress === address) {
+				return;
+			}
+
+			// Only check if we have social auth connected
+			if (!hasSocialAuth) {
+				setHasCheckedAddress(address);
+				return;
+			}
+
+			setCheckingAccount(true);
+			setAccountConflictError(null);
+
+			try {
+				// Check if user exists by wallet address
+				const userRes = await fetch(`/api/user/${encodeURIComponent(address)}`, { cache: "no-store" });
+				
+				if (userRes.ok) {
+					const existingUser = await userRes.json();
+					const existingEmail = existingUser.email || existingUser.raw?.all?.email || null;
+					const existingXHandle = existingUser.xHandle || existingUser.raw?.all?.xHandle || existingUser.raw?.all?.['x-handle'] || null;
+					const existingDiscordHandle = existingUser.discordHandle || existingUser.raw?.all?.discordHandle || existingUser.raw?.all?.['discord-handle'] || null;
+
+					// Normalize handles for comparison
+					const normalizeXHandle = (handle: string | null) => {
+						if (!handle) return null;
+						return handle.startsWith("@") ? handle.slice(1).toLowerCase() : handle.toLowerCase();
+					};
+
+					const currentEmail = googleEmail?.toLowerCase().trim() || null;
+					const currentXHandle = twitterUsername ? normalizeXHandle(twitterUsername) : null;
+					const currentDiscordHandle = discordUsername?.toLowerCase().trim() || null;
+
+					// Check if the wallet is linked to the current account or a different account
+					const emailMatch = currentEmail && existingEmail && currentEmail === existingEmail.toLowerCase();
+					const xMatch = currentXHandle && existingXHandle && currentXHandle === normalizeXHandle(existingXHandle);
+					const discordMatch = currentDiscordHandle && existingDiscordHandle && currentDiscordHandle === existingDiscordHandle.toLowerCase();
+
+					// If wallet is linked to the current account (has matching social auth), no conflict
+					if (emailMatch || xMatch || discordMatch) {
+						// Wallet is already linked to current account, allow flow to continue
+						setAccountConflictError(null);
+						return;
+					}
+
+					// If wallet exists but doesn't match current social auth, it's linked to another account
+					if (existingEmail || existingXHandle || existingDiscordHandle) {
+						setAccountConflictError(`This wallet address is already connected to another account. Please disconnect and connect a different wallet, or use the account that this wallet is linked to.`);
+					}
+				}
+			} catch (error) {
+				console.error("[ConnectWalletPage] Error checking account conflict:", error);
+				// Don't show error to user, just log it
+			} finally {
+				setCheckingAccount(false);
+				setHasCheckedAddress(address);
+			}
+		}
+
+		checkAccountConflict();
+	}, [isConnected, connected, address, hasSocialAuth, googleEmail, twitterUsername, discordUsername, hasCheckedAddress]);
+
+	// Redirect to home (which will show onboarding) after successful connection
+	// Only redirect if there's no account conflict error
+	React.useEffect(() => {
+		if (isConnected && connected && address && !accountConflictError && !checkingAccount) {
 			// Small delay to ensure connection is fully established
 			const timer = setTimeout(() => {
 				router.push("/");
 			}, 500);
 			return () => clearTimeout(timer);
 		}
-	}, [isConnected, connected, address, router]);
-
-	const [debugInfo, setDebugInfo] = React.useState<string>("");
+	}, [isConnected, connected, address, router, accountConflictError, checkingAccount]);
 
 	const currentChain = web3Auth?.currentChain;
 	const chainNamespace = currentChain?.chainNamespace;
@@ -50,9 +134,9 @@ export default function ConnectWalletPage() {
 	const chainName = currentChain?.displayName || "Unknown";
 	const ticker = currentChain?.ticker || "";
 
-	// Check if on Solana Devnet
-	const isOnSolanaDevnet =
-		chainNamespace === CHAIN_NAMESPACES.SOLANA && chainId === "0x3";
+	// Check if on Solana Mainnet
+	const isOnSolanaMainnet =
+		chainNamespace === CHAIN_NAMESPACES.SOLANA && chainId === "0x1";
 
 	// Check if Web3Auth is initialized
 	const isWeb3AuthReady = !!web3Auth;
@@ -86,13 +170,9 @@ export default function ConnectWalletPage() {
 				return;
 			}
 			
-			console.log("Attempting to connect...", { web3Auth, isConnected });
-			setDebugInfo("Opening connection modal...");
+			console.log("Current chain before connect:", web3Auth?.currentChain);
 			
-			const result = await connect();
-			
-			console.log("Connect call completed", result);
-			setDebugInfo("Connection attempt completed. Check if modal opened.");
+			await connect();
 		} catch (error) {
 			console.error("Connection error:", error);
 			const errorMessage = error instanceof Error ? error.message : String(error);
@@ -112,7 +192,7 @@ export default function ConnectWalletPage() {
 
 	const handleSwitchToSolana = async () => {
 		try {
-			await switchChain("0x3");
+			await switchChain("0x1");
 		} catch (error) {
 			console.error("Chain switch error:", error);
 		}
@@ -178,9 +258,9 @@ export default function ConnectWalletPage() {
 										<div className="text-xs text-zinc-300">
 											Namespace: {chainNamespace} | Chain ID: {chainId}
 										</div>
-										{!isOnSolanaDevnet && (
+										{!isOnSolanaMainnet && (
 											<div className="text-xs text-yellow-300">
-												⚠️ Not on Solana Devnet. Switch to continue.
+												⚠️ Not on Solana Mainnet. Switch to continue.
 											</div>
 										)}
 									</div>
@@ -213,14 +293,14 @@ export default function ConnectWalletPage() {
 									</PixelButton>
 								) : (
 									<div className="flex flex-col gap-2">
-										{!isOnSolanaDevnet && (
+										{!isOnSolanaMainnet && (
 											<PixelButton
 												variant="tab"
 												size="md"
 												onClick={handleSwitchToSolana}
 												disabled={switching}
 											>
-												{switching ? "Switching..." : "Switch to Solana Devnet"}
+												{switching ? "Switching..." : "Switch to Solana Mainnet"}
 											</PixelButton>
 										)}
 										<PixelButton
@@ -249,6 +329,27 @@ export default function ConnectWalletPage() {
 									</div>
 									<div className="text-xs text-blue-300">
 										Client ID: {process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID ? "Set" : "Missing"}
+									</div>
+								</div>
+							)}
+
+							{/* Account Conflict Error */}
+							{accountConflictError && (
+								<div className="flex flex-col gap-2 rounded border border-red-500/50 bg-red-500/10 p-3">
+									<label className="text-sm font-semibold uppercase text-red-300">
+										Account Conflict
+									</label>
+									<div className="text-sm text-red-300">
+										{accountConflictError}
+									</div>
+								</div>
+							)}
+
+							{/* Checking Account Status */}
+							{checkingAccount && (
+								<div className="flex flex-col gap-2 rounded border border-yellow-500/50 bg-yellow-500/10 p-3">
+									<div className="text-sm text-yellow-300">
+										Checking account status...
 									</div>
 								</div>
 							)}
