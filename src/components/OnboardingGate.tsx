@@ -575,19 +575,21 @@ export default function OnboardingGate({ children }: Props) {
 
 	return (
 		<div className="min-h-[100svh] w-full flex items-center justify-center">
+			{/* Logo in top left corner */}
+			<Image
+				src="/assets/logo.png"
+				alt="Logo"
+				width={28}
+				height={28}
+				className="fixed top-4 left-4 rounded-sm z-50"
+				style={{ width: '25px' }}
+				data-darkreader-ignore
+				suppressHydrationWarning
+			/>
 			<div className="pixel-window max-w-2xl w-[94vw]">
 				<div className="pixel-window__inner p-4 md:p-6">
-					<div className="mb-4 flex items-center justify-between">
+					<div className="mb-4">
 						<h2 className="text-xl md:text-2xl font-bold">Set up your access</h2>
-						<Image
-							src="/assets/logo.png"
-							alt="Logo"
-							width={28}
-							height={28}
-							className="rounded-sm"
-							data-darkreader-ignore
-							suppressHydrationWarning
-						/>
 					</div>
 
 					<p className="opacity-90 mb-4">

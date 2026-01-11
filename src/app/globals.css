@@ -5,10 +5,42 @@
   --foreground: #171717;
 }
 
-/* Local pixel font: Pixellari */
+/* Local pixel fonts */
 @font-face {
   font-family: "Pixellari";
   src: url("/fonts/Pixellari.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "04b_25";
+  src: url("/fonts/04b_25__.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PixelGothic";
+  src: url("/fonts/PixelGothic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "RasterForge";
+  src: url("/fonts/RasterForge.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "UpheavalTT";
+  src: url("/fonts/UpheavalTT.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -214,6 +246,7 @@ body {
 }
 .pixel-tab[data-state="active"] {
   background-image: url('/assets/LowResPanels With Buttons/tab_active.png');
+  outline: none;
 }
 .pixel-tab[data-state="active"] .pixel-tab__label {
   color: #ffffff;
@@ -255,6 +288,8 @@ body {
 }
 .pixel-chip__text {
   transform: translateY(-1px);
+  margin-top: -1px;
+  margin-bottom: -1px;
 }
 
 /* Entry-style chip using LowResPanels combo_box_entry, scaled via 9-slice */
@@ -354,6 +389,10 @@ body {
 }
 .pixel-icon {
   image-rendering: pixelated;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin-left: 0px;
+  margin-right: 0px;
 }
 .task-title {
   font-weight: 800;

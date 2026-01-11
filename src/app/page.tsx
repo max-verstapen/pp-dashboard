@@ -1,6 +1,6 @@
 "use client";
 import Image from "next/image";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import PixelButton from "../components/PixelButton";
 import RightTabsPanel from "../components/RightTabsPanel";
 import InfoBoard from "../components/InfoBoard";
@@ -63,8 +63,12 @@ export default function Home() {
   const [isShuffling, setIsShuffling] = useState(false);
   const [showInfoBoard, setShowInfoBoard] = useState(false);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
+  const shuffleSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    // Preload the shuffle sound
+    shuffleSoundRef.current = new Audio("/main card reveal whoosh.mp3");
+    shuffleSoundRef.current.preload = "auto";
     // Check if user has seen the panels before
     const hasSeenPanels = localStorage.getItem("hasSeenInfoAndRewardsPanels");
     
@@ -72,6 +76,21 @@ export default function Home() {
       // Show InfoBoard for first-time users
       setShowInfoBoard(true);
     }
+
+    // Preload all card images for caching
+    allCards.forEach((src) => {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'image';
+      link.href = src;
+      document.head.appendChild(link);
+    });
+
+    // Also preload using native Image API for additional caching
+    allCards.forEach((src) => {
+      const img = new window.Image();
+      img.src = src;
+    });
   }, []);
 
   const handleInfoBoardClose = () => {
@@ -87,6 +106,15 @@ export default function Home() {
   };
 
   function handleShuffle() {
+    // Play shuffle sound
+    if (shuffleSoundRef.current) {
+      shuffleSoundRef.current.currentTime = 0; // Reset to start
+      shuffleSoundRef.current.play().catch((error) => {
+        // Handle autoplay restrictions gracefully
+        console.log("Audio play failed:", error);
+      });
+    }
+
     // Get new random mix of cards from all folders
     const next = getRandomMixedCards(8);
     setIsShuffling(true);
@@ -116,18 +144,19 @@ export default function Home() {
           <section className="grid min-h-0 grid-rows-[2fr_1fr] gap-4 lg:h-full lg:col-span-7">
             {/* Upper left: logo, title, bullets */}
             <div className="panel overflow-y-auto p-6 md:p-8">
-              <div className="flex flex-col items-start min-h-0">
+              <div className="flex flex-col items-start min-h-0" style={{ marginTop: '1px', marginBottom: '1px', marginLeft: '9px', marginRight: '9px' }}>
                 <div className="mt-3 flex w-full items-center justify-between gap-3 overflow-hidden">
                   <img
                     src="/seek-to-earn.gif"
                     alt="SEEK TO EARN — EXCLUSIVE REWARDS!"
                     className="m-0 p-0 h-12 md:h-14 w-auto object-contain"
+                    style={{ lineHeight: '28px', paddingRight: '0px', overflow: 'visible', marginTop: '7px', marginBottom: '7px' }}
                   />
                  
                 </div>
                 <ul className="mt-4 space-y-4">
                     <li>
-                      <p className="font-extrabold tracking-wide text-xl md:text-2xl text-[#cbf99f]">
+                      <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
                         Play The Game
                       </p>
                       <p className="text-zinc-100/90">
@@ -135,7 +164,7 @@ export default function Home() {
                       </p>
                     </li>
                     <li>
-                      <p className="font-extrabold tracking-wide text-xl md:text-2xl text-[#cbf99f]">
+                      <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
                         Open Limited Edition Lootboxes
                       </p>
                       <p className="text-zinc-100/90">
@@ -146,7 +175,7 @@ export default function Home() {
                       </p>
                     </li>
                     <li>
-                      <p className="font-extrabold tracking-wide text-xl md:text-2xl text-[#cbf99f]">
+                      <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
                         Create Valuable Content
                       </p>
                       <p className="text-zinc-100/90">
@@ -157,7 +186,7 @@ export default function Home() {
                       </p>
                     </li>
                     <li>
-                      <p className="font-extrabold tracking-wide text-xl md:text-2xl text-[#cbf99f]">
+                      <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
                         Invite Your Friends
                       </p>
                       <p className="text-zinc-100/90">
