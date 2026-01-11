@@ -204,7 +204,7 @@ body {
   color: #0b0f06;
   text-shadow: 0 1px 0 rgba(255,255,255,0.6);
   font-family: "Pixellari", Arial, Helvetica, sans-serif;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.02em;
   transition: transform 120ms ease;
 }
@@ -214,6 +214,7 @@ body {
 }
 .pixel-tab[data-state="active"] {
   background-image: url('/assets/LowResPanels With Buttons/tab_active.png');
+  font-weight: 100;
 }
 .pixel-tab[data-state="active"] .pixel-tab__label {
   color: #ffffff;
