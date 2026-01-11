@@ -22,6 +22,11 @@ export const authOptions: NextAuthOptions = {
 		GoogleProvider({
 			clientId: googleClientId as string,
 			clientSecret: googleClientSecret as string,
+			authorization: {
+				params: {
+					prompt: "select_account",
+				},
+			},
 		}),
 		TwitterProvider({
 			clientId: process.env.TWITTER_CLIENT_ID as string,
@@ -30,6 +35,7 @@ export const authOptions: NextAuthOptions = {
 			authorization: {
 				params: {
 					scope: "tweet.read users.read offline.access",
+					prompt: "select_account",
 				},
 			},
 		}),
@@ -40,6 +46,7 @@ export const authOptions: NextAuthOptions = {
 				params: {
 					// We only need identity info; this returns both `username` and `global_name`.
 					scope: "identify",
+					prompt: "select_account",
 				},
 			},
 		}),
