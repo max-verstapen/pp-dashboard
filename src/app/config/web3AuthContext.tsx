@@ -7,20 +7,15 @@ const web3AuthContextConfig: Web3AuthContextConfig = {
     clientId: process.env.NEXT_PUBLIC_WEB3AUTH_CLIENT_ID as string,
     web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET,
     ssr: true,
-    // Prefer Solana by default
-    chains: [
-      {
-        chainNamespace: CHAIN_NAMESPACES.SOLANA,
-        chainId: "0x3", // Solana Devnet (per MetaMask/Web3Auth docs: 0x1=mainnet, 0x2=testnet, 0x3=devnet)
-        rpcTarget: "https://api.devnet.solana.com",
-        displayName: "Solana Devnet",
-        ticker: "SOL",
-        tickerName: "Solana",
-        blockExplorerUrl: "https://explorer.solana.com/?cluster=devnet",
-        logo: "",
-      },
-    ],
-    defaultChainId: "0x3",
+    // @ts-ignore - chainConfig is required for Solana initialization, even though types show chains array
+    chainConfig: {
+      chainNamespace: CHAIN_NAMESPACES.SOLANA,
+      chainId: "0x1", // Solana Mainnet (0x1=mainnet, 0x2=testnet, 0x3=devnet)
+      rpcTarget: "https://api.mainnet-beta.solana.com",
+      displayName: "Solana Mainnet",
+      ticker: "SOL",
+      tickerName: "Solana",
+    },
     modalConfig: {
       connectors: {
         [WALLET_CONNECTORS.AUTH]: {

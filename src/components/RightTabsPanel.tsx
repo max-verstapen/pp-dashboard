@@ -2440,7 +2440,7 @@ function CreateUserFlow({ walletAddress, onUserCreated, onCancel }: CreateUserFl
               )}
               <div className="flex gap-3">
                 <PixelButton
-                  variant="tab"
+                  variant="green"
                   size="md"
                   onClick={handleCreateUser}
                   disabled={loading || !username.trim()}

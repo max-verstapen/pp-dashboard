@@ -134,9 +134,9 @@ export default function ConnectWalletPage() {
 	const chainName = currentChain?.displayName || "Unknown";
 	const ticker = currentChain?.ticker || "";
 
-	// Check if on Solana Devnet
-	const isOnSolanaDevnet =
-		chainNamespace === CHAIN_NAMESPACES.SOLANA && chainId === "0x3";
+	// Check if on Solana Mainnet
+	const isOnSolanaMainnet =
+		chainNamespace === CHAIN_NAMESPACES.SOLANA && chainId === "0x1";
 
 	// Check if Web3Auth is initialized
 	const isWeb3AuthReady = !!web3Auth;
@@ -170,40 +170,9 @@ export default function ConnectWalletPage() {
 				return;
 			}
 			
-			// CRITICAL: Ensure chain is set BEFORE opening the connection modal
-			// This is especially important for external wallets like Phantom
-			const currentChain = web3Auth.currentChain;
-			const chainNamespace = currentChain?.chainNamespace;
-			const chainId = currentChain?.chainId;
+			console.log("Current chain before connect:", web3Auth?.currentChain);
 			
-			console.log("Pre-connection chain check:", { 
-				currentChain, 
-				chainNamespace, 
-				chainId,
-				needsChainSet: !chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3"
-			});
-
-			// If chain is null or not on Solana Devnet, set it BEFORE connecting
-			if (!chainNamespace || !chainId || chainNamespace !== CHAIN_NAMESPACES.SOLANA || chainId !== "0x3") {
-				setDebugInfo("Setting chain to Solana Devnet before connection...");
-				try {
-					await switchChain("0x3");
-					// Wait a bit to ensure chain is fully set
-					await new Promise(resolve => setTimeout(resolve, 200));
-					console.log("Chain set to Solana Devnet before connection");
-				} catch (switchError) {
-					console.error("Failed to set chain before connection:", switchError);
-					setDebugInfo(`Error setting chain: ${switchError instanceof Error ? switchError.message : String(switchError)}`);
-					// Continue anyway - might still work
-				}
-			}
-			
-			setDebugInfo("Opening connection modal...");
-			
-			const result = await connect();
-			
-			console.log("Connect call completed", result);
-			setDebugInfo("Connection attempt completed. Check if modal opened.");
+			await connect();
 		} catch (error) {
 			console.error("Connection error:", error);
 			const errorMessage = error instanceof Error ? error.message : String(error);
@@ -223,7 +192,7 @@ export default function ConnectWalletPage() {
 
 	const handleSwitchToSolana = async () => {
 		try {
-			await switchChain("0x3");
+			await switchChain("0x1");
 		} catch (error) {
 			console.error("Chain switch error:", error);
 		}
@@ -289,9 +258,9 @@ export default function ConnectWalletPage() {
 										<div className="text-xs text-zinc-300">
 											Namespace: {chainNamespace} | Chain ID: {chainId}
 										</div>
-										{!isOnSolanaDevnet && (
+										{!isOnSolanaMainnet && (
 											<div className="text-xs text-yellow-300">
-												⚠️ Not on Solana Devnet. Switch to continue.
+												⚠️ Not on Solana Mainnet. Switch to continue.
 											</div>
 										)}
 									</div>
@@ -324,14 +293,14 @@ export default function ConnectWalletPage() {
 									</PixelButton>
 								) : (
 									<div className="flex flex-col gap-2">
-										{!isOnSolanaDevnet && (
+										{!isOnSolanaMainnet && (
 											<PixelButton
 												variant="tab"
 												size="md"
 												onClick={handleSwitchToSolana}
 												disabled={switching}
 											>
-												{switching ? "Switching..." : "Switch to Solana Devnet"}
+												{switching ? "Switching..." : "Switch to Solana Mainnet"}
 											</PixelButton>
 										)}
 										<PixelButton
