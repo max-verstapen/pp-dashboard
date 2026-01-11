@@ -1501,13 +1501,13 @@ function GameContent() {
         // Fallback placeholders keep UI functional until API is wired
         // Using backend task ID constants with updated PP values
         const fallbackTasks: GameTask[] = [
-          { id: "FIRMWARE_UPDATE", title: "Complete 'Firmware Update'", rewardPP: 20, done: false },
-          { id: "GOTTA_GO_PLACES", title: "Complete 'Gotta Go Places'", rewardPP: 40, done: false },
-          { id: "RAMEN_RUSH", title: "Complete 'Ramen Rush'", rewardPP: 30, done: false },
-          { id: "HONEY_MEAD", title: "Complete 'Honey Mead'", rewardPP: 150, done: false },
-          { id: "FRACTURED_REALMS", title: "Complete 'Fractured Realms'", rewardPP: 200, done: false },
-          { id: "SOLANA_LOOTBOX", title: "Open a Solana Lootbox", rewardPP: 300, done: false },
-          { id: "HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", rewardPP: 250, done: false },
+          { id: "FIRMWARE_UPDATE", title: "Complete 'Firmware Update'", rewardPP: 10, done: false },
+          { id: "GOTTA_GO_PLACES", title: "Complete 'Gotta Go Places'", rewardPP: 20, done: false },
+          { id: "RAMEN_RUSH", title: "Complete 'Ramen Rush'", rewardPP: 15, done: false },
+          { id: "HONEY_MEAD", title: "Complete 'Honey Mead'", rewardPP: 75, done: false },
+          { id: "FRACTURED_REALMS", title: "Complete 'Fractured Realms'", rewardPP: 100, done: false },
+          { id: "SOLANA_LOOTBOX", title: "Open a Solana Lootbox", rewardPP: 150, done: false },
+          { id: "HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", rewardPP: 125, done: false },
         ];
         setTasks(fallbackTasks);
         // Cache fallback tasks too
@@ -1783,27 +1783,27 @@ function DailyContent() {
   const [socialTasks, setSocialTasks] = useState<SocialTask[]>([
     { id: "REFER_FRIEND", title: "Refer a friend", reward: 50, done: false },
     { id: "FOLLOW_BAKELAND_X", title: "Follow @bakelandxyz on X", reward: 25, done: false, canVerify: false },
-    { id: "POST_GAMEPLAY_X", title: "Post a Gameplay Clip on X", reward: 150, done: false, canVerify: false },
+    { id: "POST_GAMEPLAY_X", title: "Post a Gameplay Clip on X", reward: 200, done: false, canVerify: false },
   ]);
   type DailyTask = { id: string; title: string; reward: number; done: boolean };
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([
-    { id: "HARVEST_50_CARROTS", title: "Harvest x50 Carrots", reward: 50, done: false },
-    { id: "HARVEST_25_CABBAGES", title: "Harvest x25 Cabbages", reward: 50, done: false },
-    { id: "DELIVER_100_RAMEN", title: "Deliver x100 Ramen Bowls", reward: 150, done: false },
+    { id: "HARVEST_50_CARROTS", title: "Harvest x50 Carrots", reward: 25, done: false },
+    { id: "HARVEST_25_CABBAGES", title: "Harvest x25 Cabbages", reward: 25, done: false },
+    { id: "DELIVER_100_RAMEN", title: "Deliver x100 Ramen Bowls", reward: 75, done: false },
     { id: "OPEN_SOLANA_LOOTBOX", title: "Open a Solana Lootbox", reward: 200, done: false },
     { id: "OPEN_HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", reward: 250, done: false },
   ]);
   
   type WeeklyTask = { id: string; title: string; reward: number; done: boolean };
   const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTask[]>([
-    { id: "DELIVER_250_RAMEN", title: "Deliver 250 Ramen Bowls", reward: 250, done: false },
-    { id: "DELIVER_500_RAMEN", title: "Deliver 500 Ramen Bowls", reward: 400, done: false },
-    { id: "HARVEST_100_CARROTS", title: "Harvest 100 Carrots", reward: 100, done: false },
-    { id: "HARVEST_50_MUGWORT", title: "Harvest 50 Mugwort", reward: 150, done: false },
-    { id: "HARVEST_50_CABBAGES", title: "Harvest 50 Cabbages", reward: 200, done: false },
-    { id: "HARVEST_50_PUMPKINS", title: "Harvest 50 Pumpkins", reward: 250, done: false },
-    { id: "HARVEST_50_POTATOES", title: "Harvest 50 Potatoes", reward: 250, done: false },
-    { id: "COMPLETE_FRACTURED_REALMS", title: "Complete Fractured Realms", reward: 200, done: false },
+    { id: "DELIVER_250_RAMEN", title: "Deliver 250 Ramen Bowls", reward: 125, done: false },
+    { id: "DELIVER_500_RAMEN", title: "Deliver 500 Ramen Bowls", reward: 200, done: false },
+    { id: "HARVEST_100_CARROTS", title: "Harvest 100 Carrots", reward: 50, done: false },
+    { id: "HARVEST_50_MUGWORT", title: "Harvest 50 Mugwort", reward: 75, done: false },
+    { id: "HARVEST_50_CABBAGES", title: "Harvest 50 Cabbages", reward: 100, done: false },
+    { id: "HARVEST_50_PUMPKINS", title: "Harvest 50 Pumpkins", reward: 125, done: false },
+    { id: "HARVEST_50_POTATOES", title: "Harvest 50 Potatoes", reward: 125, done: false },
+    { id: "COMPLETE_FRACTURED_REALMS", title: "Complete Fractured Realms", reward: 100, done: false },
   ]);
 
   useEffect(() => {
@@ -2209,7 +2209,7 @@ function DailyContent() {
 
           <div className="task-notes">
             <div>• Posts must tag @bakelandxyz to be eligible</div>
-            <div>• Posts must include gameplay and/or Bakker footage showing Bakeland to be eligible</div>
+            <div>• Posts must include gameplay and/or physical Seeker footage showing Bakeland to be eligible</div>
           </div>
         </div>
 
@@ -2622,7 +2622,7 @@ function InviteContent() {
               </PixelButton>
             </div>
             <p className="mt-2 text-sm opacity-80">
-              Share this code with your friends to earn referral rewards!
+              Share this code with your friends to earn referral rewards! Each lootbox opened by a referred user rewards +50 PP.
             </p>
           </div>
 
