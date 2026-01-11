@@ -16,9 +16,13 @@ export default function InfoBoard({ onClose }: InfoBoardProps) {
           className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center hover:opacity-80 transition-opacity p-2"
           aria-label="Close"
         >
-          <span className="text-[#dc2626] font-bold text-xl leading-none">
-            X
-          </span>
+          <Image
+            src="/assets/close.png"
+            alt="Close"
+            width={24}
+            height={24}
+            className="w-full h-full object-contain"
+          />
         </button>
 
         {/* Inner content panel */}
@@ -29,7 +33,7 @@ export default function InfoBoard({ onClose }: InfoBoardProps) {
               How it Works
             </h1>
             <Image
-              src="/assets/YellowCheckbox.png"
+              src="/assets/Green Icons Outlined/help.png"
               alt="Info"
               width={24}
               height={24}

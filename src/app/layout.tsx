@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "bakeland player points dashboard",
+  title: "Bakeland Player Points Dashboard",
   description: "Get your rank, quest scores, and player points info for bakeland",
+  icons: {
+    icon: "/icon.png",
+  },
 };
 
 export default function RootLayout({

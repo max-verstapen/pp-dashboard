@@ -6,20 +6,58 @@ import RightTabsPanel from "../components/RightTabsPanel";
 import InfoBoard from "../components/InfoBoard";
 import RewardsModal from "../components/RewardsModal";
 
+// All available cards from the three folders
+const nameTagCards = [
+  "/Name tag/Green.gif",
+  "/Name tag/Purple.gif",
+  "/Name tag/Red.gif",
+];
+
+const skinCards = [
+  "/Skin/Bulla.gif",
+  "/Skin/Farmer I.gif",
+  "/Skin/Farmer II.gif",
+  "/Skin/Gremla.gif",
+  "/Skin/Joy.gif",
+  "/Skin/Lando.gif",
+  "/Skin/Mr Dingleton.gif",
+  "/Skin/Narc I.gif",
+  "/Skin/Narc II.gif",
+  "/Skin/Neon Monke.gif",
+  "/Skin/Pepo.gif",
+  "/Skin/Saga Monke.gif",
+  "/Skin/Sprototard.gif",
+  "/Skin/Stella.gif",
+  "/Skin/Ted.gif",
+  "/Skin/Wormilio.gif",
+  "/Skin/Yeeterina.gif",
+];
+
+const budCards = [
+  "/Buds/50BUDS.gif",
+  "/Buds/250BUDS.gif",
+  "/Buds/750BUDS.gif",
+  "/Buds/2500BUDS.gif",
+  "/Buds/10000BUDS.gif",
+];
+
+// Combined pool of all cards
+const allCards = [...nameTagCards, ...skinCards, ...budCards];
+
+// Function to randomly select and mix cards from all folders
+function getRandomMixedCards(count: number): string[] {
+  const shuffled = [...allCards];
+  // Fisher-Yates shuffle
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  // Return the requested number of cards
+  return shuffled.slice(0, count);
+}
+
 export default function Home() {
-  const initialCards = useMemo(
-    () => [
-      "/assets/cards/card2.gif",
-      "/assets/cards/card1.gif",
-      "/assets/cards/card7.gif",
-      "/assets/cards/card3.gif",
-      "/assets/cards/card4.gif",
-      "/assets/cards/card5.gif",
-      "/assets/cards/card6.gif",
-      "/assets/cards/card2.gif",
-    ],
-    []
-  );
+  const initialCards = useMemo(() => getRandomMixedCards(8), []);
 
   const [cards, setCards] = useState<string[]>(initialCards);
   const [isShuffling, setIsShuffling] = useState(false);
@@ -27,8 +65,13 @@ export default function Home() {
   const [showRewardsModal, setShowRewardsModal] = useState(false);
 
   useEffect(() => {
-    // Show InfoBoard when component mounts
-    setShowInfoBoard(true);
+    // Check if user has seen the panels before
+    const hasSeenPanels = localStorage.getItem("hasSeenInfoAndRewardsPanels");
+    
+    if (!hasSeenPanels) {
+      // Show InfoBoard for first-time users
+      setShowInfoBoard(true);
+    }
   }, []);
 
   const handleInfoBoardClose = () => {
@@ -39,15 +82,13 @@ export default function Home() {
 
   const handleRewardsModalClose = () => {
     setShowRewardsModal(false);
+    // Mark that user has seen both panels
+    localStorage.setItem("hasSeenInfoAndRewardsPanels", "true");
   };
 
   function handleShuffle() {
-    // Fisher-Yates shuffle
-    const next = [...cards];
-    for (let i = next.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [next[i], next[j]] = [next[j], next[i]];
-    }
+    // Get new random mix of cards from all folders
+    const next = getRandomMixedCards(8);
     setIsShuffling(true);
     // Wait for animation (0.6s) + max stagger (0.3s) + small buffer
     const totalDurationMs = 540;
@@ -112,7 +153,7 @@ export default function Home() {
                         Post meaningful information about the vision, gameplay, and ongoing Seeker campaign on X
                       </p>
                       <p className="text-zinc-100/90">
-                        Posts must tag @bakelandxyz to be considered.
+                        Posts must tag @bakelandxyz to be eligible.
                       </p>
                     </li>
                     <li>
