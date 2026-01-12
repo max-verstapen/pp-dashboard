@@ -1183,25 +1183,32 @@ function MyStatsContent() {
                       onClick={async () => {
                         try {
                           // First, check if this email is already linked to another user
-                          const checkRes = await fetch(`/api/user/by-email/${encodeURIComponent(googleEmail.toLowerCase().trim())}`, { cache: "no-store" });
+                          const normalizedEmail = googleEmail.toLowerCase().trim();
+                          const checkRes = await fetch(`/api/user/by-email/${encodeURIComponent(normalizedEmail)}`, { cache: "no-store" });
                           if (checkRes.ok) {
                             const existingUser = await checkRes.json();
                             if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
-                              // Email is linked to another account
+                              // Email is linked to another account - BLOCK linking and prevent any API calls or UI updates
                               const otherUsername = existingUser.username || existingUser.user?.username || "another user";
                               alert(`Cannot link this Google/email account. It is already linked to another account (@${otherUsername}).`);
-                              return;
+                              return; // Early return - no API call, no UI update
                             }
-                            // Same address, so it's already linked - shouldn't happen but allow update
+                            // Same address means already linked to this account - no need to link again
+                            if (existingUser?.address && existingUser.address.toLowerCase() === addressForApi.toLowerCase()) {
+                              alert("This email is already linked to your account.");
+                              return; // Early return - prevent duplicate linking
+                            }
                           }
                           
-                          // Link the email to current user
+                          // Only proceed with linking if no conflict detected
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/email`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ email: googleEmail }),
                           });
+                          
                           if (res.ok) {
+                            // Only update UI on successful link
                             setDidSyncGoogle(true);
                             // Clear cache and refetch user data
                             const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
@@ -1218,12 +1225,17 @@ function MyStatsContent() {
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
                           } else {
+                            // Handle API errors - especially 409 conflicts
                             const errorData = await res.json().catch(() => ({}));
-                            alert(errorData.error || "Failed to link Google/email account. Please try again.");
+                            const errorMessage = errorData.errorMessage || errorData.error || "Failed to link Google/email account. Please try again.";
+                            alert(errorMessage);
+                            // Don't update UI state - keep it as "Link" button
+                            return; // Early return - prevent any UI updates on error
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking email:", error);
                           alert("An error occurred while linking Google/email account. Please try again.");
+                          // Don't update UI state on error - keep it as "Link" button
                         }
                       }}
                     >
@@ -1260,27 +1272,34 @@ function MyStatsContent() {
                         try {
                           // Normalize X handle (remove @ if present)
                           const normalizedTwitter = effectiveTwitter.startsWith("@") ? effectiveTwitter.slice(1) : effectiveTwitter;
+                          const trimmedTwitter = normalizedTwitter.trim();
                           
                           // First, check if this X handle is already linked to another user
-                          const checkRes = await fetch(`/api/user/by-x/${encodeURIComponent(normalizedTwitter.trim())}`, { cache: "no-store" });
+                          const checkRes = await fetch(`/api/user/by-x/${encodeURIComponent(trimmedTwitter)}`, { cache: "no-store" });
                           if (checkRes.ok) {
                             const existingUser = await checkRes.json();
                             if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
-                              // X handle is linked to another account
+                              // X handle is linked to another account - BLOCK linking and prevent any API calls or UI updates
                               const otherUsername = existingUser.username || existingUser.user?.username || "another user";
                               alert(`Cannot link this X/Twitter account. It is already linked to another account (@${otherUsername}).`);
-                              return;
+                              return; // Early return - no API call, no UI update
                             }
-                            // Same address, so it's already linked - shouldn't happen but allow update
+                            // Same address means already linked to this account - no need to link again
+                            if (existingUser?.address && existingUser.address.toLowerCase() === addressForApi.toLowerCase()) {
+                              alert("This X/Twitter handle is already linked to your account.");
+                              return; // Early return - prevent duplicate linking
+                            }
                           }
                           
-                          // Link the X handle to current user
+                          // Only proceed with linking if no conflict detected
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/x-handle`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ xHandle: normalizedTwitter }),
+                            body: JSON.stringify({ xHandle: trimmedTwitter }),
                           });
+                          
                           if (res.ok) {
+                            // Only update UI on successful link
                             setDidSyncX(true);
                             // Clear cache and refetch user data
                             const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
@@ -1297,12 +1316,17 @@ function MyStatsContent() {
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
                           } else {
+                            // Handle API errors - especially 409 conflicts
                             const errorData = await res.json().catch(() => ({}));
-                            alert(errorData.error || "Failed to link X/Twitter account. Please try again.");
+                            const errorMessage = errorData.errorMessage || errorData.error || "Failed to link X/Twitter account. Please try again.";
+                            alert(errorMessage);
+                            // Don't update UI state - keep it as "Link" button
+                            return; // Early return - prevent any UI updates on error
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking X handle:", error);
                           alert("An error occurred while linking X/Twitter account. Please try again.");
+                          // Don't update UI state on error - keep it as "Link" button
                         }
                       }}
                       style={{ cursor: "pointer" }}
@@ -1342,25 +1366,32 @@ function MyStatsContent() {
                       onClick={async () => {
                         try {
                           // First, check if this Discord handle is already linked to another user
-                          const checkRes = await fetch(`/api/user/by-discord/${encodeURIComponent(effectiveDiscord.trim())}`, { cache: "no-store" });
+                          const normalizedDiscord = effectiveDiscord.trim();
+                          const checkRes = await fetch(`/api/user/by-discord/${encodeURIComponent(normalizedDiscord)}`, { cache: "no-store" });
                           if (checkRes.ok) {
                             const existingUser = await checkRes.json();
                             if (existingUser?.address && existingUser.address.toLowerCase() !== addressForApi.toLowerCase()) {
-                              // Discord handle is linked to another account
+                              // Discord handle is linked to another account - BLOCK linking and prevent any API calls or UI updates
                               const otherUsername = existingUser.username || existingUser.user?.username || "another user";
                               alert(`Cannot link this Discord account. It is already linked to another account (@${otherUsername}).`);
-                              return;
+                              return; // Early return - no API call, no UI update
                             }
-                            // Same address, so it's already linked - shouldn't happen but allow update
+                            // Same address means already linked to this account - no need to link again
+                            if (existingUser?.address && existingUser.address.toLowerCase() === addressForApi.toLowerCase()) {
+                              alert("This Discord handle is already linked to your account.");
+                              return; // Early return - prevent duplicate linking
+                            }
                           }
                           
-                          // Link the Discord handle to current user
+                          // Only proceed with linking if no conflict detected
                           const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/discord-handle`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ discordHandle: effectiveDiscord }),
+                            body: JSON.stringify({ discordHandle: normalizedDiscord }),
                           });
+                          
                           if (res.ok) {
+                            // Only update UI on successful link
                             setDidSyncDiscord(true);
                             // Clear cache and refetch user data
                             const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
@@ -1377,12 +1408,17 @@ function MyStatsContent() {
                               if (refetchData) setCachedJson(cacheKey, refetchData);
                             }
                           } else {
+                            // Handle API errors - especially 409 conflicts
                             const errorData = await res.json().catch(() => ({}));
-                            alert(errorData.error || "Failed to link Discord account. Please try again.");
+                            const errorMessage = errorData.errorMessage || errorData.error || "Failed to link Discord account. Please try again.";
+                            alert(errorMessage);
+                            // Don't update UI state - keep it as "Link" button
+                            return; // Early return - prevent any UI updates on error
                           }
                         } catch (error) {
                           console.error("[MyStats] Error linking Discord handle:", error);
                           alert("An error occurred while linking Discord account. Please try again.");
+                          // Don't update UI state on error - keep it as "Link" button
                         }
                       }}
                       style={{ cursor: "pointer" }}
@@ -2334,7 +2370,9 @@ function CreateUserFlow({ walletAddress, onUserCreated, onCancel }: CreateUserFl
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Failed to create user (${res.status})`);
+        // Show user-friendly error message for 409 conflicts (handle already linked)
+        const errorMessage = data.errorMessage || data.error || `Failed to create user (${res.status})`;
+        throw new Error(errorMessage);
       }
 
       // Clear cache to force refresh

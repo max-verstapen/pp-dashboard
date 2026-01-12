@@ -78,10 +78,39 @@ export async function PUT(
 			cache: "no-store",
 		});
 		const text = await res.text();
+		let errorData: any = null;
+		try {
+			errorData = JSON.parse(text);
+		} catch {
+			// non-json response
+		}
+
 		if (!res.ok) {
+			// Forward 409 conflict errors with their error messages
+			if (res.status === 409 && errorData?.errorMessage) {
+				return NextResponse.json(
+					{
+						error: errorData.error || "Account link conflict",
+						errorCode: errorData.errorCode,
+						errorMessage: errorData.errorMessage,
+					},
+					{ status: 409 }
+				);
+			}
+			// Forward other error status codes with their original status
+			if (errorData) {
+				return NextResponse.json(
+					{
+						error: errorData.error || "Failed to update email",
+						errorCode: errorData.errorCode,
+						errorMessage: errorData.errorMessage || errorData.error,
+					},
+					{ status: res.status }
+				);
+			}
 			return NextResponse.json(
 				{ error: "Failed to update email", status: res.status, body: text },
-				{ status: 502 }
+				{ status: res.status >= 400 && res.status < 600 ? res.status : 502 }
 			);
 		}
 		let json: any = null;

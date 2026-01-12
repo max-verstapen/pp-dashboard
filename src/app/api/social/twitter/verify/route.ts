@@ -36,6 +36,7 @@ interface TwitterVerificationRequest {
 
 /**
  * Verifies if a user follows @bakelandxyz
+ * Uses the check_follow_relationship endpoint from twitterapi.io
  */
 async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error?: string }> {
   if (!TWITTER_API_KEY) {
@@ -47,76 +48,32 @@ async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error
     const normalizedHandle = xHandle.replace(/^@/, "").trim();
     const normalizedBakeland = BAKELAND_USERNAME.replace(/^@/, "").trim();
 
-    // Get user info for both users to get their IDs
-    // Try endpoint: GET /user/by/username/{username} or GET /user/info?username={username}
-    let userUrl = `${TWITTER_API_BASE_URL}/user/by/username/${encodeURIComponent(normalizedHandle)}`;
-    userUrl = addApiKeyToUrl(userUrl);
+    // Use the check_follow_relationship endpoint
+    // https://api.twitterapi.io/twitter/user/check_follow_relationship
+    const checkFollowUrl = new URL("https://api.twitterapi.io/twitter/user/check_follow_relationship");
+    checkFollowUrl.searchParams.append("source_user_name", normalizedHandle);
+    checkFollowUrl.searchParams.append("target_user_name", normalizedBakeland);
     
-    const userRes = await fetch(userUrl, {
+    const followRes = await fetch(checkFollowUrl.toString(), {
       method: "GET",
       headers: createTwitterApiHeaders(),
     });
 
-    if (!userRes.ok) {
-      const errorText = await userRes.text();
-      console.error(`[Twitter API] Failed to get user info for ${normalizedHandle}:`, errorText);
-      return { verified: false, error: `Failed to fetch user info: ${userRes.status}` };
+    if (!followRes.ok) {
+      const errorText = await followRes.text();
+      console.error(`[Twitter API] Failed to check follow relationship:`, errorText);
+      return { verified: false, error: `Failed to check follow relationship: ${followRes.status}` };
     }
 
-    const userData = await userRes.json();
-    const userId = userData?.data?.id || userData?.id;
-
-    if (!userId) {
-      return { verified: false, error: "Could not find user ID" };
-    }
-
-    // Get Bakeland user info
-    let bakelandUrl = `${TWITTER_API_BASE_URL}/user/by/username/${encodeURIComponent(normalizedBakeland)}`;
-    bakelandUrl = addApiKeyToUrl(bakelandUrl);
+    const followData = await followRes.json();
     
-    const bakelandRes = await fetch(bakelandUrl, {
-      method: "GET",
-      headers: createTwitterApiHeaders(),
-    });
-
-    if (!bakelandRes.ok) {
-      const errorText = await bakelandRes.text();
-      console.error(`[Twitter API] Failed to get Bakeland user info:`, errorText);
-      return { verified: false, error: `Failed to fetch Bakeland user info: ${bakelandRes.status}` };
+    // Check if the request was successful
+    if (followData.status === "error") {
+      return { verified: false, error: followData.message || "Failed to verify follow relationship" };
     }
 
-    const bakelandData = await bakelandRes.json();
-    const bakelandId = bakelandData?.data?.id || bakelandData?.id;
-
-    if (!bakelandId) {
-      return { verified: false, error: "Could not find Bakeland user ID" };
-    }
-
-    // Check if user follows Bakeland by getting their following list
-    // Using the Get User Followings endpoint from twitterapi.io
-    let followingUrl = `${TWITTER_API_BASE_URL}/user/${encodeURIComponent(userId)}/following`;
-    followingUrl = addApiKeyToUrl(followingUrl);
-    
-    const followingRes = await fetch(followingUrl, {
-      method: "GET",
-      headers: createTwitterApiHeaders(),
-    });
-
-    if (!followingRes.ok) {
-      const errorText = await followingRes.text();
-      console.error(`[Twitter API] Failed to get following list:`, errorText);
-      return { verified: false, error: `Failed to check following list: ${followingRes.status}` };
-    }
-
-    const followingData = await followingRes.json();
-    const following = followingData?.data || followingData?.following || [];
-    
-    // Check if bakelandId is in the following list
-    const isFollowing = following.some((f: any) => 
-      (f.id === bakelandId || f.id_str === bakelandId) || 
-      (f.username?.toLowerCase() === normalizedBakeland.toLowerCase()) ||
-      (f.screen_name?.toLowerCase() === normalizedBakeland.toLowerCase())
-    );
+    // The 'following' field indicates if source_user_name follows target_user_name
+    const isFollowing = followData?.data?.following === true;
 
     return { verified: isFollowing };
   } catch (error: any) {
