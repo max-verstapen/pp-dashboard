@@ -48,6 +48,17 @@ export async function POST(req: NextRequest) {
 				body: data,
 				target,
 			});
+			// For 409 conflicts, ensure errorMessage is properly structured
+			if (res.status === 409 && data?.errorMessage) {
+				return NextResponse.json(
+					{
+						error: data.error || "Account creation conflict",
+						errorCode: data.errorCode,
+						errorMessage: data.errorMessage,
+					},
+					{ status: 409 }
+				);
+			}
 		}
 		return NextResponse.json(data, { status: res.status });
 	} catch {
