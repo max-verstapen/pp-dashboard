@@ -2226,7 +2226,7 @@ function DailyContent() {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="task-reward">+{t.reward} PP</div>
-                  {!t.done && t.id && t.id !== "REFER_FRIEND" && t.canVerify && (
+                  {!t.done && t.id && t.id !== "REFER_FRIEND" && t.id !== "POST_GAMEPLAY_X" && t.canVerify && (
                     <button
                       onClick={() => handleVerifyTask(t.id!, t.xHandle)}
                       className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded pixel-button"
@@ -2235,7 +2235,7 @@ function DailyContent() {
                       Verify
                     </button>
                   )}
-                  {!t.done && t.id && t.id !== "REFER_FRIEND" && !t.canVerify && (
+                  {!t.done && t.id && t.id !== "REFER_FRIEND" && t.id !== "POST_GAMEPLAY_X" && !t.canVerify && (
                     <span className="text-xs text-zinc-400">Connect X</span>
                   )}
                 </div>

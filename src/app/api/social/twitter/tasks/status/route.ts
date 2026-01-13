@@ -156,7 +156,7 @@ export async function GET(req: NextRequest) {
         title: "Post a Gameplay Clip on X",
         reward: 150,
         completed: completedTaskIds.has("POST_GAMEPLAY_X"),
-        canVerify: !!xHandle,
+        canVerify: false, // Not verifiable - completion status is checked from DB only
         xHandle: xHandle,
       },
     ];
