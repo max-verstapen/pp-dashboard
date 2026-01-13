@@ -127,7 +127,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-[100svh] items-center justify-center font-sans">
+    <div className="flex min-h-[100svh] items-start justify-center font-sans lg:items-center">
       {/* Info Board Modal */}
       {showInfoBoard && <InfoBoard onClose={handleInfoBoardClose} />}
       
@@ -137,13 +137,13 @@ export default function Home() {
       {/* Single-frame wrapper with equal T/B and equal L/R margins.
           On small screens: natural height so panels stack one after another.
           On large screens: fixed frame height with internal scrolling. */}
-      <main className="mx-[4vw] mt-[4svh] mb-[4svh] w-[calc(100vw-8vw)] min-h-[80svh] lg:h-[80svh]">
+      <main className="mx-[4vw] mt-0 mb-[4svh] w-[calc(100vw-8vw)] max-w-full min-h-[80svh] lg:mt-[4svh] lg:h-[80svh]">
         {/* Responsive frame: stack on small screens, two columns on larger screens */}
         <div className="grid w-full min-h-0 grid-cols-1 gap-4 lg:h-full lg:grid-cols-12">
           {/* LEFT column */}
-          <section className="grid min-h-0 grid-rows-[2fr_1fr] gap-4 lg:h-full lg:col-span-7">
-            {/* Upper left: logo, title, bullets */}
-            <div className="panel overflow-y-auto p-6 md:p-8">
+          <section className="grid min-h-0 grid-rows-[auto] gap-4 lg:h-full lg:col-span-7 lg:grid-rows-[2fr_1fr] w-full max-w-full justify-items-center lg:justify-items-stretch">
+            {/* Upper left: logo, title, bullets - hidden on mobile, shown on desktop */}
+            <div className="panel panel-mobile-full overflow-y-auto p-6 md:p-8 w-full hidden lg:block">
               <div className="flex flex-col items-start min-h-0" style={{ marginTop: '1px', marginBottom: '1px', marginLeft: '9px', marginRight: '9px' }}>
                 <div className="mt-3 flex w-full items-center justify-between gap-3 overflow-hidden">
                   <img
@@ -197,10 +197,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Bottom left: shuffle row */}
-            <div className={`panel ${isShuffling ? "shuffle-anim" : ""}`}>
+            {/* Bottom left: shuffle row - hidden on mobile, shown on desktop */}
+            <div className={`panel hidden lg:block ${isShuffling ? "shuffle-anim" : ""}`}>
               <div className="flex flex-col items-center gap-4">
-                <div className="flex w-full items-center justify-center gap-3 overflow-hidden">
+                <div className="cards-scroll-container flex w-full items-center gap-3 overflow-x-auto overflow-y-hidden lg:justify-center lg:overflow-hidden">
                   {cards.map((src, idx) => (
                     <div
                       key={src + idx}
@@ -225,9 +225,90 @@ export default function Home() {
           </section>
 
           {/* RIGHT column */}
-          <section className="w-full min-h-0 lg:h-full lg:col-span-5">
+          <section className="w-full min-h-0 col-span-12 lg:h-full lg:col-span-5">
             <RightTabsPanel />
           </section>
+
+          {/* Cards panel - shown on mobile below Right Panel, hidden on desktop */}
+          <div className={`panel lg:hidden col-span-12 ${isShuffling ? "shuffle-anim" : ""}`}>
+            <div className="flex flex-col items-center gap-4">
+              <div className="cards-scroll-container flex w-full items-center gap-3 overflow-x-auto overflow-y-hidden">
+                {cards.map((src, idx) => (
+                  <div
+                    key={src + idx}
+                    className="card relative h-40 w-28 shrink-0 overflow-hidden rounded-md bg-black/30"
+                  >
+                    <Image
+                      src={src}
+                      alt={`Card ${idx + 1}`}
+                      fill
+                      sizes="112px"
+                      className="object-cover"
+                      priority={idx < 2}
+                    />
+                  </div>
+                ))}
+              </div>
+              <PixelButton onClick={handleShuffle} variant="tab" size="md">
+                SHUFFLE
+              </PixelButton>
+            </div>
+          </div>
+
+          {/* Seek to Earn panel - shown on mobile at bottom, hidden on desktop */}
+          <div className="panel lg:hidden col-span-12 overflow-y-auto p-6 md:p-8">
+            <div className="flex flex-col items-start min-h-0" style={{ marginTop: '1px', marginBottom: '1px', marginLeft: '9px', marginRight: '9px' }}>
+              <div className="mt-3 flex w-full items-center justify-between gap-3 overflow-hidden">
+                <img
+                  src="/seek-to-earn.gif"
+                  alt="SEEK TO EARN — EXCLUSIVE REWARDS!"
+                  className="m-0 p-0 h-12 md:h-14 w-auto object-contain"
+                  style={{ lineHeight: '28px', paddingRight: '0px', overflow: 'visible', marginTop: '7px', marginBottom: '7px' }}
+                />
+               
+              </div>
+              <ul className="mt-4 space-y-4">
+                  <li>
+                    <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
+                      Play The Game
+                    </p>
+                    <p className="text-zinc-100/90">
+                      Complete in-game quests and work your way up the leaderboard!
+                    </p>
+                  </li>
+                  <li>
+                    <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
+                      Open Limited Edition Lootboxes
+                    </p>
+                    <p className="text-zinc-100/90">
+                      Earn points every time you open a lootbox.
+                    </p>
+                    <p className="text-zinc-100/90">
+                      The supply of premium lootboxes are capped at 10,000!
+                    </p>
+                  </li>
+                  <li>
+                    <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
+                      Create Valuable Content
+                    </p>
+                    <p className="text-zinc-100/90">
+                      Post meaningful information about the vision, gameplay, and ongoing Seeker campaign on X
+                    </p>
+                    <p className="text-zinc-100/90">
+                      Posts must tag @bakelandxyz to be eligible.
+                    </p>
+                  </li>
+                  <li>
+                    <p className="font-extrabold tracking-wide text-xl text-[#cbf99f]" style={{ fontSize: '20px', fontFamily: 'RasterForge' }}>
+                      Invite Your Friends
+                    </p>
+                    <p className="text-zinc-100/90">
+                      Invite your friends to play together and earn free reward boxes!
+                    </p>
+                  </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </main>
     </div>

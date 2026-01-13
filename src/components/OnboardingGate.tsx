@@ -581,7 +581,7 @@ export default function OnboardingGate({ children }: Props) {
 				alt="Logo"
 				width={28}
 				height={28}
-				className="fixed top-4 left-4 rounded-sm z-50"
+				className="fixed top-4 left-4 rounded-sm z-50 hidden lg:block"
 				style={{ width: '25px' }}
 				data-darkreader-ignore
 				suppressHydrationWarning
