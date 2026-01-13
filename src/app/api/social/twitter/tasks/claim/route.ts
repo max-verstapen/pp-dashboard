@@ -123,133 +123,114 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // If verified, try to mark the task as completed in the backend
-    // NOTE: Based on the backend Lambda code you shared, there's no POST endpoint shown for completing tasks
-    // We'll try common endpoint patterns - if none work, you'll need to implement the endpoint
-    // Expected endpoint: POST /player-points/{address}/tasks/{taskId}/complete
-    // OR POST /player-points/{address}/complete (with taskId, taskType=ONE_TIME, points, metadata in body)
+    // If verified, mark the task as completed in the backend
+    // Using Lambda endpoint: POST /player-points/{address}/tasks/{taskId}/complete
+    // The Lambda expects: taskId in path, metadata object in body
     
     const taskTitle = taskId === "FOLLOW_BAKELAND_X" ? "Follow @bakelandxyz on X" : "Post a Gameplay Clip on X";
     const taskReward = taskId === "FOLLOW_BAKELAND_X" ? 25 : 150;
 
+    // Validate API key is present
+    if (!apiKey || apiKey.trim().length === 0) {
+      console.error(`[API] API key is missing or empty`, {
+        hasBaseUrl: !!baseUrl,
+        envVars: {
+          USER_API_URL: !!process.env.USER_API_URL,
+          USER_API_BASE_URL: !!process.env.USER_API_BASE_URL,
+          USERDB_API_URL: !!process.env.USERDB_API_URL,
+          USER_API_KEY: !!process.env.USER_API_KEY,
+          USERDB_API_KEY: !!process.env.USERDB_API_KEY,
+        },
+      });
+      return NextResponse.json({
+        verified: true,
+        completed: false,
+        error: "Backend API key not configured. Please set USER_API_KEY or USERDB_API_KEY environment variable.",
+      }, { status: 500 });
+    }
+
     try {
-      // Try pattern 1: POST /player-points/{address}/tasks/{taskId}/complete
-      const completeUrl1 = `${baseUrl.replace(/\/+$/, "")}/player-points/${encodeURIComponent(address)}/tasks/${encodeURIComponent(taskId)}/complete`;
-      console.log(`[API] Attempting to complete task (pattern 1)`, {
+      // Use the Lambda endpoint: POST /player-points/{address}/tasks/{taskId}/complete
+      // The Lambda expects: taskId in path, metadata in body
+      const completeUrl = `${baseUrl.replace(/\/+$/, "")}/player-points/${encodeURIComponent(address)}/tasks/${encodeURIComponent(taskId)}/complete`;
+      console.log(`[API] Attempting to complete task`, {
         address: address.substring(0, 10) + "...",
         taskId,
-        url: completeUrl1,
+        url: completeUrl,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey.length,
       });
 
-      const completeRes1 = await fetch(completeUrl1, {
+      // API Gateway expects x-api-key (lowercase) header - matching other routes in codebase
+      const completeRes = await fetch(completeUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Api-Key": apiKey,
+          "x-api-key": apiKey,
         },
         body: JSON.stringify({
-          taskId,
-          taskType: "ONE_TIME",
-          points: taskReward,
           metadata: {
             title: taskTitle,
             verified: true,
             verifiedAt: new Date().toISOString(),
             xHandle: xHandle,
+            taskType: "ONE_TIME",
+            points: taskReward,
           },
         }),
         cache: "no-store",
       });
 
-      if (completeRes1.ok) {
-        const completeData = await completeRes1.json();
-        console.log(`[API] Task completed successfully (pattern 1)`, {
+      if (completeRes.ok) {
+        const completeData = await completeRes.json();
+        console.log(`[API] Task completed successfully`, {
           address: address.substring(0, 10) + "...",
           taskId,
+          response: completeData,
         });
         return NextResponse.json({
           verified: true,
           completed: true,
-          message: "Task verified and completed successfully",
+          message: completeData.message || "Task verified and completed successfully",
           taskId,
+          pointsEarned: completeData.pointsEarned,
+          totalPoints: completeData.totalPoints,
           data: completeData,
         });
       }
 
-      // Pattern 1 failed, try pattern 2: POST /player-points/{address}/complete
-      const errorText1 = await completeRes1.text().catch(() => "");
-      console.warn(`[API] Pattern 1 failed (${completeRes1.status}), trying pattern 2...`, {
-        address: address.substring(0, 10) + "...",
-        taskId,
-        status: completeRes1.status,
-        errorText: errorText1.substring(0, 200),
-      });
-
-      const completeUrl2 = `${baseUrl.replace(/\/+$/, "")}/player-points/${encodeURIComponent(address)}/complete`;
-      const completeRes2 = await fetch(completeUrl2, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Key": apiKey,
-        },
-        body: JSON.stringify({
-          taskId,
-          taskType: "ONE_TIME",
-          scope: "one",
-          points: taskReward,
-          metadata: {
-            title: taskTitle,
-            verified: true,
-            verifiedAt: new Date().toISOString(),
-            xHandle: xHandle,
-          },
-        }),
-        cache: "no-store",
-      });
-
-      if (completeRes2.ok) {
-        const completeData = await completeRes2.json();
-        console.log(`[API] Task completed successfully (pattern 2)`, {
-          address: address.substring(0, 10) + "...",
-          taskId,
-        });
-        return NextResponse.json({
-          verified: true,
-          completed: true,
-          message: "Task verified and completed successfully",
-          taskId,
-          data: completeData,
-        });
-      }
-
-      // Both patterns failed
-      const errorText2 = await completeRes2.text().catch(() => "");
-      let parsedError2: any = null;
+      // Request failed
+      const errorText = await completeRes.text().catch(() => "");
+      let parsedError: any = null;
       try {
-        parsedError2 = JSON.parse(errorText2);
+        parsedError = JSON.parse(errorText);
       } catch {
         // Not JSON
       }
 
-      console.error(`[API] All completion endpoint patterns failed`, {
+      console.error(`[API] Task completion failed`, {
         address: address.substring(0, 10) + "...",
         taskId,
-        pattern1Status: completeRes1.status,
-        pattern1Error: errorText1.substring(0, 200),
-        pattern2Status: completeRes2.status,
-        pattern2Error: errorText2.substring(0, 200),
-        pattern2Parsed: parsedError2,
-        message: "Backend needs to implement POST endpoint to complete tasks",
+        status: completeRes.status,
+        statusText: completeRes.statusText,
+        errorText: errorText.substring(0, 500),
+        parsedError,
+        url: completeUrl,
+        method: "POST",
+        hasApiKey: !!apiKey,
+        apiKeyPrefix: apiKey ? `${apiKey.substring(0, 4)}...` : "none",
+        note: completeRes.status === 403 && errorText.includes("Missing Authentication Token") 
+          ? "This error usually means API Gateway doesn't recognize the route. Check: 1) Route is deployed, 2) Path matches exactly, 3) Method matches (POST), 4) API key is valid in API Gateway"
+          : undefined,
       });
 
       return NextResponse.json({
         verified: true,
         completed: false,
-        message: "Task verified but completion endpoint not found. Please implement POST endpoint in backend.",
+        message: parsedError?.message || "Task verified but failed to complete",
+        error: parsedError?.error || `HTTP ${completeRes.status}: ${errorText.substring(0, 200)}`,
         taskId,
-        error: `Pattern 1 (${completeRes1.status}): ${errorText1.substring(0, 100)}, Pattern 2 (${completeRes2.status}): ${errorText2.substring(0, 100)}`,
-        note: "Expected endpoint: POST /player-points/{address}/tasks/{taskId}/complete or POST /player-points/{address}/complete",
-      });
+      }, { status: completeRes.status });
     } catch (error: any) {
       console.error("[API] Exception completing task", {
         error: error?.message ?? String(error),

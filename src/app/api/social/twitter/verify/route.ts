@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const TWITTER_API_BASE_URL = "https://twitterapi.io/v2";
 const BAKELAND_USERNAME = "bakelandxyz"; // @bakelandxyz without @
-const TWITTER_API_KEY = process.env.TWITTER_API_KEY || process.env.TWITTERAPI_IO_API_KEY; // twitterapi.io API key
+const TWITTER_API_KEY = (process.env.TWITTER_API_KEY || process.env.TWITTERAPI_IO_API_KEY)?.trim(); // twitterapi.io API key
 
 // Helper function to create fetch options with authentication
 function createTwitterApiHeaders(): HeadersInit {
@@ -11,10 +11,10 @@ function createTwitterApiHeaders(): HeadersInit {
   };
   
   // Try header-based auth first (common for twitterapi.io)
-  if (TWITTER_API_KEY) {
+  if (TWITTER_API_KEY && TWITTER_API_KEY.length > 0) {
     headers["X-API-Key"] = TWITTER_API_KEY;
-    // Alternative: Authorization header if needed
-    // headers["Authorization"] = `Bearer ${TWITTER_API_KEY}`;
+  } else {
+    console.warn("[Twitter API] TWITTER_API_KEY is missing or empty");
   }
   
   return headers;
@@ -39,8 +39,9 @@ interface TwitterVerificationRequest {
  * Uses the check_follow_relationship endpoint from twitterapi.io
  */
 async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error?: string }> {
-  if (!TWITTER_API_KEY) {
-    return { verified: false, error: "Twitter API key not configured" };
+  if (!TWITTER_API_KEY || TWITTER_API_KEY.length === 0) {
+    console.error("[Twitter API] TWITTER_API_KEY is not set or empty in environment variables");
+    return { verified: false, error: "Twitter API key not configured. Please set TWITTER_API_KEY environment variable." };
   }
 
   try {
@@ -54,18 +55,53 @@ async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error
     checkFollowUrl.searchParams.append("source_user_name", normalizedHandle);
     checkFollowUrl.searchParams.append("target_user_name", normalizedBakeland);
     
-    const followRes = await fetch(checkFollowUrl.toString(), {
+    const headers = createTwitterApiHeaders();
+    const url = checkFollowUrl.toString();
+    
+    console.log(`[Twitter API] Checking follow relationship:`, {
+      source_user_name: normalizedHandle,
+      target_user_name: normalizedBakeland,
+      url: url.replace(TWITTER_API_KEY || "", "[REDACTED]"),
+      hasApiKey: !!TWITTER_API_KEY,
+    });
+    
+    const followRes = await fetch(url, {
       method: "GET",
-      headers: createTwitterApiHeaders(),
+      headers: headers,
+    });
+
+    const responseText = await followRes.text();
+    console.log(`[Twitter API] Response status: ${followRes.status}`, {
+      statusText: followRes.statusText,
+      responseLength: responseText.length,
     });
 
     if (!followRes.ok) {
-      const errorText = await followRes.text();
-      console.error(`[Twitter API] Failed to check follow relationship:`, errorText);
-      return { verified: false, error: `Failed to check follow relationship: ${followRes.status}` };
+      console.error(`[Twitter API] Failed to check follow relationship:`, {
+        status: followRes.status,
+        statusText: followRes.statusText,
+        response: responseText.substring(0, 500),
+      });
+      return { verified: false, error: `Failed to check follow relationship: ${followRes.status} - ${responseText.substring(0, 200)}` };
     }
 
-    const followData = await followRes.json();
+    let followData;
+    try {
+      followData = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(`[Twitter API] Failed to parse response as JSON:`, {
+        response: responseText.substring(0, 500),
+        error: parseError,
+      });
+      return { verified: false, error: "Invalid response format from Twitter API" };
+    }
+    
+    console.log(`[Twitter API] Parsed response:`, {
+      status: followData.status,
+      hasData: !!followData.data,
+      following: followData?.data?.following,
+      followed_by: followData?.data?.followed_by,
+    });
     
     // Check if the request was successful
     if (followData.status === "error") {
@@ -77,7 +113,11 @@ async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error
 
     return { verified: isFollowing };
   } catch (error: any) {
-    console.error("[Twitter API] Error verifying follow:", error);
+    console.error("[Twitter API] Error verifying follow:", {
+      error: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    });
     return { verified: false, error: error?.message || "Unknown error" };
   }
 }
@@ -87,8 +127,9 @@ async function verifyFollow(xHandle: string): Promise<{ verified: boolean; error
  * Checks for tweets mentioning @bakelandxyz with gameplay-related keywords
  */
 async function verifyGameplayPost(xHandle: string): Promise<{ verified: boolean; error?: string; tweetUrl?: string }> {
-  if (!TWITTER_API_KEY) {
-    return { verified: false, error: "Twitter API key not configured" };
+  if (!TWITTER_API_KEY || TWITTER_API_KEY.length === 0) {
+    console.error("[Twitter API] TWITTER_API_KEY is not set or empty");
+    return { verified: false, error: "Twitter API key not configured. Please set TWITTER_API_KEY environment variable." };
   }
 
   try {
@@ -201,7 +242,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!TWITTER_API_KEY) {
+    if (!TWITTER_API_KEY || TWITTER_API_KEY.length === 0) {
+      console.error("[Twitter API] TWITTER_API_KEY is not set or empty");
       return NextResponse.json(
         { error: "Twitter API key not configured. Please set TWITTER_API_KEY environment variable." },
         { status: 500 }
