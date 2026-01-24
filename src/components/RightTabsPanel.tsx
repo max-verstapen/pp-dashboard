@@ -1542,8 +1542,6 @@ function GameContent() {
           { id: "RAMEN_RUSH", title: "Complete 'Ramen Rush'", rewardPP: 15, done: false },
           { id: "HONEY_MEAD", title: "Complete 'Honey Mead'", rewardPP: 75, done: false },
           { id: "FRACTURED_REALMS", title: "Complete 'Fractured Realms'", rewardPP: 100, done: false },
-          { id: "SOLANA_LOOTBOX", title: "Open a Solana Lootbox", rewardPP: 150, done: false },
-          { id: "HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", rewardPP: 125, done: false },
         ];
         setTasks(fallbackTasks);
         // Cache fallback tasks too
@@ -1678,6 +1676,9 @@ function GameContent() {
                 </div>
               ))
             )}
+          </div>
+          <div className="task-notes">
+            <div>• One time tasks update as you complete</div>
           </div>
         </div>
       </div>
@@ -1839,7 +1840,6 @@ function DailyContent() {
     { id: "HARVEST_50_CABBAGES", title: "Harvest 50 Cabbages", reward: 100, done: false },
     { id: "HARVEST_50_PUMPKINS", title: "Harvest 50 Pumpkins", reward: 125, done: false },
     { id: "HARVEST_50_POTATOES", title: "Harvest 50 Potatoes", reward: 125, done: false },
-    { id: "COMPLETE_FRACTURED_REALMS", title: "Complete Fractured Realms", reward: 100, done: false },
   ]);
 
   useEffect(() => {
@@ -2273,6 +2273,9 @@ function DailyContent() {
               </div>
             ))}
           </div>
+          <div className="task-notes">
+            <div>• Updates daily</div>
+          </div>
         </div>
 
         {/* Weekly Tasks */}
@@ -2298,6 +2301,9 @@ function DailyContent() {
                 <div className="task-reward">+{t.reward} PP</div>
               </div>
             ))}
+          </div>
+          <div className="task-notes">
+            <div>• Updates weekly</div>
           </div>
         </div>
       </div>
