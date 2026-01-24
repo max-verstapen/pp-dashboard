@@ -7,8 +7,6 @@ const placeholderTasks = [
   { id: "RAMEN_RUSH", title: "Complete 'Ramen Rush'", rewardPP: 15, done: false },
   { id: "HONEY_MEAD", title: "Complete 'Honey Mead'", rewardPP: 75, done: false },
   { id: "FRACTURED_REALMS", title: "Complete 'Fractured Realms'", rewardPP: 100, done: false },
-  { id: "SOLANA_LOOTBOX", title: "Open a Solana Lootbox", rewardPP: 150, done: false },
-  { id: "HONEYCUB_LOOTBOX", title: "Open a Honeycub Lootbox", rewardPP: 125, done: false },
 ];
 
 export async function GET() {
