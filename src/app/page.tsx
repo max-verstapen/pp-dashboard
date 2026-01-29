@@ -5,6 +5,7 @@ import PixelButton from "../components/PixelButton";
 import RightTabsPanel from "../components/RightTabsPanel";
 import InfoBoard from "../components/InfoBoard";
 import RewardsModal from "../components/RewardsModal";
+import CampaignDetailsModal from "../components/CampaignDetailsModal";
 
 // All available cards from the three folders
 const nameTagCards = [
@@ -63,12 +64,20 @@ export default function Home() {
   const [isShuffling, setIsShuffling] = useState(false);
   const [showInfoBoard, setShowInfoBoard] = useState(false);
   const [showRewardsModal, setShowRewardsModal] = useState(false);
+  const [showCampaignDetailsModal, setShowCampaignDetailsModal] = useState(false);
   const shuffleSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     // Preload the shuffle sound
     shuffleSoundRef.current = new Audio("/main card reveal whoosh.mp3");
     shuffleSoundRef.current.preload = "auto";
+    
+    // Show campaign details modal on website open (once per session)
+    const hasSeenCampaignDetails = sessionStorage.getItem("hasSeenCampaignDetails");
+    if (!hasSeenCampaignDetails) {
+      setShowCampaignDetailsModal(true);
+    }
+    
     // Check if user has seen the panels before
     const hasSeenPanels = localStorage.getItem("hasSeenInfoAndRewardsPanels");
     
@@ -105,6 +114,12 @@ export default function Home() {
     localStorage.setItem("hasSeenInfoAndRewardsPanels", "true");
   };
 
+  const handleCampaignDetailsModalClose = () => {
+    setShowCampaignDetailsModal(false);
+    // Mark that user has seen campaign details for this session
+    sessionStorage.setItem("hasSeenCampaignDetails", "true");
+  };
+
   function handleShuffle() {
     // Play shuffle sound
     if (shuffleSoundRef.current) {
@@ -128,6 +143,9 @@ export default function Home() {
 
   return (
     <div className="flex min-h-[100svh] items-center justify-center font-sans">
+      {/* Campaign Details Modal */}
+      {showCampaignDetailsModal && <CampaignDetailsModal onClose={handleCampaignDetailsModalClose} />}
+      
       {/* Info Board Modal */}
       {showInfoBoard && <InfoBoard onClose={handleInfoBoardClose} />}
       
