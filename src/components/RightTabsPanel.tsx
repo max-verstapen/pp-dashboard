@@ -309,7 +309,7 @@ export default function RightTabsPanel() {
   }
 
   return (
-    <div className="pixel-window w-full lg:h-full">
+    <div className="pixel-window w-full max-w-full lg:h-full">
       {/* Tabs header */}
       <div className="pixel-tabs">
         {TAB_LABELS.map((label) => {
@@ -1238,6 +1238,7 @@ function MyStatsContent() {
                           // Don't update UI state on error - keep it as "Link" button
                         }
                       }}
+                      style={{ cursor: "pointer" }}
                     >
                       <span className="pixel-chip__text">Link</span>
                     </button>
@@ -1251,6 +1252,7 @@ function MyStatsContent() {
                     storeWalletBeforeLink();
                     signIn("google", { callbackUrl: "/" });
                   }}
+                  style={{ cursor: "pointer" }}
                 >
                   <span className="pixel-chip__text">Link</span>
                 </button>
@@ -1466,6 +1468,7 @@ function MyStatsContent() {
                     }
                   }}
                   disabled={walletConnectLoading}
+                  style={{ cursor: "pointer" }}
                 >
                   <span className="pixel-chip__text">{walletConnectLoading ? "Connecting..." : "Link Wallet"}</span>
                 </button>
