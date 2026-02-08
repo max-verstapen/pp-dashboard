@@ -72,11 +72,8 @@ export default function Home() {
     shuffleSoundRef.current = new Audio("/main card reveal whoosh.mp3");
     shuffleSoundRef.current.preload = "auto";
     
-    // Show campaign details modal on website open (once per session)
-    const hasSeenCampaignDetails = sessionStorage.getItem("hasSeenCampaignDetails");
-    if (!hasSeenCampaignDetails) {
-      setShowCampaignDetailsModal(true);
-    }
+    // Show campaign details modal every time user visits the website
+    setShowCampaignDetailsModal(true);
     
     // Check if user has seen the panels before
     const hasSeenPanels = localStorage.getItem("hasSeenInfoAndRewardsPanels");
@@ -116,8 +113,6 @@ export default function Home() {
 
   const handleCampaignDetailsModalClose = () => {
     setShowCampaignDetailsModal(false);
-    // Mark that user has seen campaign details for this session
-    sessionStorage.setItem("hasSeenCampaignDetails", "true");
   };
 
   function handleShuffle() {
