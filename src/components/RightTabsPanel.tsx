@@ -1622,9 +1622,6 @@ function GameContent() {
       {/* Header with title and PP chip */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Game</h2>
-        <div className="pixel-chip" aria-label="PP balance">
-          <span className="pixel-chip__text">{currentPP} PP</span>
-        </div>
       </div>
 
       {/* Loading overlay */}
@@ -2188,9 +2185,6 @@ function DailyContent() {
       {/* Header with title and PP chip */}
       <div className="flex items-center justify-between gap-4 mb-3">
         <h2 className="text-2xl md:text-3xl drop-shadow font-bold">Bounties</h2>
-        <div className="pixel-chip" aria-label="PP balance">
-          <span className="pixel-chip__text">{currentPP} PP</span>
-        </div>
       </div>
 
       {/* Loading overlay */}

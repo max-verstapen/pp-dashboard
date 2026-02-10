@@ -115,6 +115,10 @@ export default function Home() {
     setShowCampaignDetailsModal(false);
   };
 
+  const handleRewardsButtonClick = () => {
+    setShowRewardsModal(true);
+  };
+
   function handleShuffle() {
     // Play shuffle sound
     if (shuffleSoundRef.current) {
@@ -159,12 +163,17 @@ export default function Home() {
             <div className="panel overflow-y-auto p-6 md:p-8">
               <div className="flex flex-col items-start min-h-0" style={{ marginTop: '1px', marginBottom: '1px', marginLeft: '9px', marginRight: '9px' }}>
                 <div className="mt-3 flex w-full items-center justify-between gap-3 overflow-hidden">
+                  
                   <img
                     src="/seek-to-earn.gif"
                     alt="SEEK TO EARN — EXCLUSIVE REWARDS!"
                     className="m-0 p-0 h-12 md:h-14 w-auto object-contain"
                     style={{ lineHeight: '28px', paddingRight: '0px', overflow: 'visible', marginTop: '7px', marginBottom: '7px' }}
                   />
+
+                  <PixelButton onClick={handleRewardsButtonClick} variant="tab" size="md" className="py-10px">
+                    REWARDS
+                  </PixelButton>
                  
                 </div>
                 <ul className="mt-4 space-y-4">
