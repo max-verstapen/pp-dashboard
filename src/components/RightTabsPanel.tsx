@@ -5,6 +5,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useWeb3AuthUser, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { useGlobalWallet } from "./GlobalWalletProvider";
 import PixelButton from "./PixelButton";
+import TweetVerificationPanel from "./TweetVerificationPanel";
 // Solana imports commented out for now - will add back after basic connection works
 // import { useSolanaWallet } from "@web3auth/modal/react/solana";
 // import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
@@ -1815,6 +1816,7 @@ function DailyContent() {
   const [dailyLoading, setDailyLoading] = useState<boolean>(false);
   const [weeklyLoading, setWeeklyLoading] = useState<boolean>(false);
   const [socialLoading, setSocialLoading] = useState<boolean>(false);
+  const [engagementLoading, setEngagementLoading] = useState<boolean>(false);
 
   type SocialTask = { id?: string; title: string; reward: number; done: boolean; canVerify?: boolean; xHandle?: string | null };
   const [socialTasks, setSocialTasks] = useState<SocialTask[]>([
@@ -2098,6 +2100,37 @@ function DailyContent() {
     };
   }, [walletAddress]);
 
+  // Prefetch engagement data when tab opens (if wallet connected)
+  useEffect(() => {
+    let abort = false;
+    if (!walletAddress) {
+      setEngagementLoading(false);
+      return;
+    }
+
+    async function prefetchEngagement() {
+      setEngagementLoading(true);
+      try {
+        const res = await fetch("/api/social/twitter/engagement-refresh", {
+          method: "POST",
+          cache: "no-store",
+        });
+        if (!res.ok && !abort) {
+          console.error("[DailyContent] Failed to prefetch engagement data");
+        }
+      } catch (error) {
+        console.error("[DailyContent] Error prefetching engagement:", error);
+      } finally {
+        if (!abort) setEngagementLoading(false);
+      }
+    }
+
+    prefetchEngagement();
+    return () => {
+      abort = true;
+    };
+  }, [walletAddress]);
+
   // Handle task verification and claiming
   const handleVerifyTask = async (taskId: string, xHandle: string | null | undefined) => {
     if (!walletAddress || !xHandle) {
@@ -2191,7 +2224,7 @@ function DailyContent() {
       </div>
 
       {/* Loading overlay */}
-      {(dailyLoading || weeklyLoading || socialLoading) && (
+      {(dailyLoading || weeklyLoading || socialLoading || engagementLoading) && (
         <div className="loading-overlay">
           <div className="loading-content">
             <div className="pixel-loading-spinner"></div>
@@ -2245,6 +2278,12 @@ function DailyContent() {
             <div>• Posts must include gameplay and/or physical Seeker footage showing Bakeland to be eligible</div>
           </div>
         </div>
+
+        {/* Tweet engagement verification - uses connected X account */}
+        <TweetVerificationPanel 
+          xHandle={socialTasks.find((t) => t.xHandle)?.xHandle ?? null}
+          isLoading={engagementLoading}
+        />
 
         {/* Daily Tasks */}
         <div className="tasks-section mt-6">
