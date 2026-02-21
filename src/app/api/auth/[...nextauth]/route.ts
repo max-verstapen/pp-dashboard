@@ -28,6 +28,8 @@ export const authOptions: NextAuthOptions = {
 				},
 			},
 		}),
+		// X (Twitter) OAuth: Users may see ERR_BLOCKED_BY_CLIENT (ads-api) from ad blockers,
+		// or 429 Too Many Requests if Twitter rate-limits. Auth error banner on "/" explains both.
 		TwitterProvider({
 			clientId: process.env.TWITTER_CLIENT_ID as string,
 			clientSecret: process.env.TWITTER_CLIENT_SECRET as string,

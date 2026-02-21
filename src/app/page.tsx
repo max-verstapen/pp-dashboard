@@ -1,11 +1,12 @@
 "use client";
 import Image from "next/image";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { Suspense, useMemo, useState, useEffect, useRef } from "react";
 import PixelButton from "../components/PixelButton";
 import RightTabsPanel from "../components/RightTabsPanel";
 import InfoBoard from "../components/InfoBoard";
 import RewardsModal from "../components/RewardsModal";
 import CampaignDetailsModal from "../components/CampaignDetailsModal";
+import AuthErrorBanner from "../components/AuthErrorBanner";
 
 // All available cards from the three folders
 const nameTagCards = [
@@ -142,6 +143,10 @@ export default function Home() {
 
   return (
     <div className="flex min-h-[100svh] items-start justify-center font-sans lg:items-center">
+      {/* Auth error banner (e.g. X/Twitter 429 or ad blocker) */}
+      <Suspense fallback={null}>
+        <AuthErrorBanner />
+      </Suspense>
       {/* Info Board Modal */}
       {showInfoBoard && <InfoBoard onClose={handleInfoBoardClose} />}
       

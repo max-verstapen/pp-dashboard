@@ -395,6 +395,9 @@ function MyStatsContent() {
   const { connect: connectWallet, loading: walletConnectLoading } = useWeb3AuthConnect();
   const rawAdapterPk = useMemo(() => null as string | null, []);
 
+  // Throttle OAuth buttons so we never trigger multiple redirects (avoids Twitter rate limit / reload loop)
+  const [oauthClickAt, setOauthClickAt] = useState<{ google?: number; twitter?: number; discord?: number }>({});
+
   const googleEmail: string | null = (session as any)?.googleEmail ?? null;
   const twitterUsername: string | null = (session as any)?.twitterUsername ?? null;
   const discordUsername: string | null = (session as any)?.discordUsername ?? null;
@@ -487,6 +490,16 @@ function MyStatsContent() {
       }
     }
   }, [discordUsername]);
+
+  // Listen for OAuth popup completion (Twitter opens in popup to avoid full-page redirect reload loop)
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.data?.type !== "auth-complete") return;
+      updateSession();
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [updateSession]);
 
   // Persist last-known wallet address for display between redirects
   useEffect(() => {
@@ -1249,7 +1262,9 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
+                  disabled={oauthClickAt.google != null && Date.now() - (oauthClickAt.google ?? 0) < 5000}
                   onClick={() => {
+                    setOauthClickAt((prev) => ({ ...prev, google: Date.now() }));
                     storeWalletBeforeLink();
                     signIn("google", { callbackUrl: "/" });
                   }}
@@ -1343,9 +1358,21 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
-                  onClick={() => {
+                  disabled={oauthClickAt.twitter != null && Date.now() - (oauthClickAt.twitter ?? 0) < 5000}
+                  onClick={async () => {
+                    setOauthClickAt((prev) => ({ ...prev, twitter: Date.now() }));
                     storeWalletBeforeLink();
-                    signIn("twitter", { callbackUrl: "/" });
+                    // Open Twitter OAuth in popup to avoid full-page redirect reload loop (causes rate limit)
+                    const res = await signIn("twitter", {
+                      redirect: false,
+                      callbackUrl: "/auth/complete?close=1",
+                    });
+                    if ((res as any)?.url) {
+                      window.open((res as any).url, "oauth-twitter", "width=560,height=640,scrollbars=yes");
+                    } else if ((res as any)?.error) {
+                      setOauthClickAt((prev) => ({ ...prev, twitter: undefined }));
+                      alert((res as any).error ?? "X sign-in failed. Try again in a few minutes.");
+                    }
                   }}
                   style={{ cursor: "pointer" }}
                   title="Link your X/Twitter account"
@@ -1435,7 +1462,9 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
+                  disabled={oauthClickAt.discord != null && Date.now() - (oauthClickAt.discord ?? 0) < 5000}
                   onClick={() => {
+                    setOauthClickAt((prev) => ({ ...prev, discord: Date.now() }));
                     storeWalletBeforeLink();
                     signIn("discord", { callbackUrl: "/" });
                   }}

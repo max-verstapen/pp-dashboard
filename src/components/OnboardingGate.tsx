@@ -61,6 +61,8 @@ export default function OnboardingGate({ children }: Props) {
 	const [addressLookupKey, setAddressLookupKey] = useState<string | null>(null);
 	// True when we've confirmed a user record exists upstream via email/X/Discord.
 	const [hasUpstreamUser, setHasUpstreamUser] = useState(false);
+	// Throttle OAuth buttons to avoid multiple redirects (Twitter rate limit)
+	const [twitterOAuthClickAt, setTwitterOAuthClickAt] = useState<number | null>(null);
 
 	// Identify connect route (we'll branch in render, not before hooks)
 	const isConnectPage = pathname === "/connect";
@@ -629,7 +631,13 @@ export default function OnboardingGate({ children }: Props) {
 							{hasX ? (
 								<PixelButton disabled>@{effectiveTwitter}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("twitter", { callbackUrl: "/" })}>
+								<PixelButton
+									disabled={twitterOAuthClickAt != null && Date.now() - twitterOAuthClickAt < 5000}
+									onClick={() => {
+										setTwitterOAuthClickAt(Date.now());
+										signIn("twitter", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}
