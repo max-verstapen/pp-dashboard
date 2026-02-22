@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TWEETS_TO_VERIFY, type TweetToVerify } from "../config/tweetsToVerify";
 
 type VerifyAction = "comment" | "quote";
@@ -36,36 +36,54 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
   const [verified, setVerified] = useState<Record<string, Partial<Record<VerifyAction, boolean>>>>({});
   const [cacheStatus, setCacheStatus] = useState<EngagementStatus | null>(null);
   const [globalNextRefreshAt, setGlobalNextRefreshAt] = useState<number | null>(null);
+  const [refreshingEngagement, setRefreshingEngagement] = useState(false);
+  const hasRefreshedForHandle = useRef(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/social/twitter/engagement-status", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setCacheStatus(data);
+        let earliest: number | null = null;
+        for (const tweetId of Object.keys(data.status || {})) {
+          const status = data.status[tweetId];
+          const commentNext = status.comment.nextRefreshAt;
+          const quoteNext = status.quote.nextRefreshAt;
+          if (commentNext && (!earliest || commentNext < earliest)) earliest = commentNext;
+          if (quoteNext && (!earliest || quoteNext < earliest)) earliest = quoteNext;
+        }
+        setGlobalNextRefreshAt(earliest);
+      }
+    } catch (e) {
+      console.error("[TweetVerificationPanel] Failed to fetch cache status:", e);
+    }
+  }, []);
 
   // Fetch cache status on mount and periodically
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch("/api/social/twitter/engagement-status", { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          setCacheStatus(data);
-          
-          // Calculate global next refresh (earliest nextRefreshAt across all tweets/actions)
-          let earliest: number | null = null;
-          for (const tweetId of Object.keys(data.status || {})) {
-            const status = data.status[tweetId];
-            const commentNext = status.comment.nextRefreshAt;
-            const quoteNext = status.quote.nextRefreshAt;
-            if (commentNext && (!earliest || commentNext < earliest)) earliest = commentNext;
-            if (quoteNext && (!earliest || quoteNext < earliest)) earliest = quoteNext;
-          }
-          setGlobalNextRefreshAt(earliest);
-        }
-      } catch (e) {
-        console.error("[TweetVerificationPanel] Failed to fetch cache status:", e);
-      }
-    };
-
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30 * 1000); // Refresh status every 30s
+    const interval = setInterval(fetchStatus, 30 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchStatus]);
+
+  // When xHandle is available, trigger engagement refresh once so data is loaded
+  useEffect(() => {
+    if (!xHandle?.trim() || hasRefreshedForHandle.current) return;
+    hasRefreshedForHandle.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/social/twitter/engagement-refresh", { method: "POST", cache: "no-store" });
+        if (res.ok && !cancelled) await fetchStatus();
+      } catch (e) {
+        console.error("[TweetVerificationPanel] engagement-refresh failed:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [xHandle, fetchStatus]);
 
   // Update global countdown timer every second
   const [timeUntilRefresh, setTimeUntilRefresh] = useState<number | null>(null);
@@ -103,24 +121,29 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
       return;
     }
 
-    if (isLoading) {
+    if (isLoading || refreshingEngagement) {
       alert("Engagement data is still loading. Please wait.");
       return;
     }
 
-    // Check cache status - if not valid, show error
-    if (!cacheStatus?.status[tweetId]) {
-      alert("Engagement data is still loading. Please wait for refresh.");
-      return;
+    const status = cacheStatus?.status?.[tweetId]?.[action];
+    const cacheInvalid = !status?.isValid || !status?.nextRefreshAt;
+
+    // If cache is empty/expired, trigger refresh first then verify
+    if (cacheInvalid) {
+      setRefreshingEngagement(true);
+      try {
+        const refreshRes = await fetch("/api/social/twitter/engagement-refresh", { method: "POST", cache: "no-store" });
+        if (refreshRes.ok) await fetchStatus();
+      } catch (e) {
+        console.error("[TweetVerificationPanel] engagement-refresh failed:", e);
+        setRefreshingEngagement(false);
+        alert("Failed to load engagement data. Please try again.");
+        return;
+      }
+      setRefreshingEngagement(false);
     }
 
-    const status = cacheStatus.status[tweetId][action];
-    if (!status.isValid || !status.nextRefreshAt) {
-      alert("Engagement data is still loading or expired. Please wait for refresh.");
-      return;
-    }
-
-    // Call API to check cache (no Twitter API call, just cache lookup)
     try {
       const res = await fetch("/api/social/twitter/verify-engagement", {
         method: "POST",
@@ -188,18 +211,18 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
                 <button
                   type="button"
                   onClick={() => handleVerify(tweet.id, "comment")}
-                  disabled={isLoading || isVerified(tweet.id, "comment")}
+                  disabled={isLoading || refreshingEngagement || isVerified(tweet.id, "comment")}
                   className="px-3 py-1.5 text-xs rounded font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-sky-600/80 hover:bg-sky-600 text-white border border-sky-500/50"
                 >
-                  {isVerified(tweet.id, "comment") ? "✓ Commented" : "Verify Comment"}
+                  {isVerified(tweet.id, "comment") ? "✓ Commented" : refreshingEngagement ? "Loading…" : "Verify Comment"}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleVerify(tweet.id, "quote")}
-                  disabled={isLoading || isVerified(tweet.id, "quote")}
+                  disabled={isLoading || refreshingEngagement || isVerified(tweet.id, "quote")}
                   className="px-3 py-1.5 text-xs rounded font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-emerald-600/80 hover:bg-emerald-600 text-white border border-emerald-500/50"
                 >
-                  {isVerified(tweet.id, "quote") ? "✓ Quoted" : "Verify Quote"}
+                  {isVerified(tweet.id, "quote") ? "✓ Quoted" : refreshingEngagement ? "Loading…" : "Verify Quote"}
                 </button>
               </div>
             </div>

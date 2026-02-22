@@ -64,8 +64,9 @@ export default function OnboardingGate({ children }: Props) {
 	// Throttle OAuth buttons to avoid multiple redirects (Twitter rate limit)
 	const [twitterOAuthClickAt, setTwitterOAuthClickAt] = useState<number | null>(null);
 
-	// Identify connect route (we'll branch in render, not before hooks)
+	// Identify routes that skip onboarding (show page directly)
 	const isConnectPage = pathname === "/connect";
+	const isXTestPage = pathname === "/x-test";
 
 	const effectiveAddress = gw.address || null;
 	const googleEmail: string | null = (session as any)?.googleEmail ?? null;
@@ -552,8 +553,8 @@ export default function OnboardingGate({ children }: Props) {
 		}
 	};
 
-	// If we're on the connect page, skip onboarding entirely
-	if (isConnectPage) {
+	// If we're on the connect or x-test page, skip onboarding entirely
+	if (isConnectPage || isXTestPage) {
 		return <>{children}</>;
 	}
 
