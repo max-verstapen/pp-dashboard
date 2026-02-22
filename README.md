@@ -18,6 +18,14 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+### X (Twitter) sign-in issues
+
+If X/Twitter login fails or shows console errors:
+
+- **429 Too Many Requests** – Twitter is rate-limiting. Wait 15–60 minutes and try again; avoid repeated sign-in attempts.
+- **ERR_BLOCKED_BY_CLIENT** (e.g. `ads-api.twitter.com`) – An ad blocker or privacy extension is blocking Twitter’s OAuth page. Temporarily disable it for `twitter.com` and `x.com`, then retry.
+- **lockdown-install.js / SES** – These come from Twitter’s own page and are not from this app; they can be ignored unless they coincide with the above.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

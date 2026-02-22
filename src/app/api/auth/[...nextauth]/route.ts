@@ -2,6 +2,7 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import TwitterProvider from "next-auth/providers/twitter";
 import DiscordProvider from "next-auth/providers/discord";
 import GoogleProvider from "next-auth/providers/google";
+import { getSessionSnapshot, deleteSessionSnapshot } from "@/lib/session-snapshot-store";
 
 // Validate environment variables
 const discordClientId = process.env.DISCORD_CLIENT_ID;
@@ -28,6 +29,8 @@ export const authOptions: NextAuthOptions = {
 				},
 			},
 		}),
+		// X (Twitter) OAuth: Users may see ERR_BLOCKED_BY_CLIENT (ads-api) from ad blockers,
+		// or 429 Too Many Requests if Twitter rate-limits. Auth error banner on "/" explains both.
 		TwitterProvider({
 			clientId: process.env.TWITTER_CLIENT_ID as string,
 			clientSecret: process.env.TWITTER_CLIENT_SECRET as string,
@@ -56,60 +59,60 @@ export const authOptions: NextAuthOptions = {
 			if (account) {
 				const anyProfile = (profile || {}) as any;
 				const provider = account.provider;
+				const t = token as any;
 
-				// Preserve existing session data - don't overwrite unless we're explicitly setting a new value
-				// This allows linking multiple accounts without losing existing auth state
+				// When linking a second provider, NextAuth often passes a new JWT (new sub), so the
+				// token may not contain the previous provider data. Merge from snapshot if we saved one
+				// (keyed by profile email) so all linked accounts persist.
+				const snapshotEmail = anyProfile?.email ?? t.email ?? null;
+				const snapshot = snapshotEmail ? getSessionSnapshot(snapshotEmail) : null;
+				if (snapshot) deleteSessionSnapshot(snapshotEmail as string);
 
-				// Set Google email during Google sign-in
+				const existing = {
+					googleEmail: t.googleEmail ?? snapshot?.googleEmail ?? null,
+					twitterUsername: t.twitterUsername ?? snapshot?.twitterUsername ?? null,
+					discordUsername: t.discordUsername ?? snapshot?.discordUsername ?? null,
+				};
+
+				// Set Google email only during Google sign-in
 				if (provider === "google") {
-					const email = anyProfile?.email || token.email;
-					if (email) {
-						(token as any).googleEmail = email;
-					}
-					// Preserve existing Twitter and Discord handles
-					// (they're already in token, just making it explicit)
+					const email = anyProfile?.email ?? t.email ?? existing.googleEmail;
+					if (email) t.googleEmail = email;
+				} else if (existing.googleEmail) {
+					t.googleEmail = existing.googleEmail;
 				}
 
-				// Only set the X (Twitter) username during a Twitter sign-in
+				// Set X (Twitter) username only during Twitter sign-in
 				if (provider === "twitter") {
 					const possibleTwitterUsername =
-						// Prefer actual handle fields; never use display `name`
-						anyProfile?.data?.username || // Twitter v2
-						anyProfile?.username || // some adapters
-						anyProfile?.screen_name || // legacy v1
-						(anyProfile?.user && anyProfile?.user?.screen_name) ||
-						(token as any).twitterUsername;
-					if (possibleTwitterUsername) {
-						(token as any).twitterUsername = possibleTwitterUsername;
-					}
-					// Preserve existing Google email and Discord handle
-					// (they're already in token, just making it explicit)
+						anyProfile?.data?.username ??
+						anyProfile?.username ??
+						anyProfile?.screen_name ??
+						(anyProfile?.user && anyProfile?.user?.screen_name) ??
+						existing.twitterUsername;
+					if (possibleTwitterUsername) t.twitterUsername = possibleTwitterUsername;
+				} else if (existing.twitterUsername) {
+					t.twitterUsername = existing.twitterUsername;
 				}
 
-				// Only set the Discord username during a Discord sign-in
+				// Set Discord username only during Discord sign-in
 				if (provider === "discord") {
-					// Discord returns both `username` (stable handle) and `global_name` (display name).
-					// We must never store the display name; only accept handle-like strings.
 					const rawDiscordUsername =
-						anyProfile?.username ||
-						(token as any).discordUsername;
-
+						anyProfile?.username ?? existing.discordUsername;
 					const isHandleLike =
 						typeof rawDiscordUsername === "string" &&
 						/^[A-Za-z0-9._-]+$/.test(rawDiscordUsername.trim());
-
 					if (isHandleLike) {
-						(token as any).discordUsername = rawDiscordUsername.trim();
+						t.discordUsername = rawDiscordUsername.trim();
+					} else if (existing.discordUsername) {
+						t.discordUsername = existing.discordUsername;
 					}
-
-					// If a stale session mistakenly stored a Discord snowflake ID as the twitterUsername,
-					// clear it here. X/Twitter handles are 1-15 chars, letters/digits/underscore.
-					const maybeTwitter = (token as any).twitterUsername;
-					if (typeof maybeTwitter === "string" && /^[0-9]{17,20}$/.test(maybeTwitter)) {
-						delete (token as any).twitterUsername;
+					// If a stale session stored a Discord snowflake as twitterUsername, clear it.
+					if (typeof t.twitterUsername === "string" && /^[0-9]{17,20}$/.test(t.twitterUsername)) {
+						delete t.twitterUsername;
 					}
-					// Preserve existing Google email and Twitter handle
-					// (they're already in token, just making it explicit)
+				} else if (existing.discordUsername) {
+					t.discordUsername = existing.discordUsername;
 				}
 			}
 			return token;

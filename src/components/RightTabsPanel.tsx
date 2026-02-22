@@ -5,6 +5,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import { useWeb3AuthUser, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { useGlobalWallet } from "./GlobalWalletProvider";
 import PixelButton from "./PixelButton";
+import TweetVerificationPanel from "./TweetVerificationPanel";
 // Solana imports commented out for now - will add back after basic connection works
 // import { useSolanaWallet } from "@web3auth/modal/react/solana";
 // import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
@@ -394,6 +395,9 @@ function MyStatsContent() {
   const { connect: connectWallet, loading: walletConnectLoading } = useWeb3AuthConnect();
   const rawAdapterPk = useMemo(() => null as string | null, []);
 
+  // Throttle OAuth buttons so we never trigger multiple redirects (avoids Twitter rate limit / reload loop)
+  const [oauthClickAt, setOauthClickAt] = useState<{ google?: number; twitter?: number; discord?: number }>({});
+
   const googleEmail: string | null = (session as any)?.googleEmail ?? null;
   const twitterUsername: string | null = (session as any)?.twitterUsername ?? null;
   const discordUsername: string | null = (session as any)?.discordUsername ?? null;
@@ -419,7 +423,8 @@ function MyStatsContent() {
   const [didSyncX, setDidSyncX] = useState<boolean>(false);
   const [didSyncDiscord, setDidSyncDiscord] = useState<boolean>(false);
   const [didSyncGoogle, setDidSyncGoogle] = useState<boolean>(false);
-  
+  const [refetchUserAfterAuth, setRefetchUserAfterAuth] = useState<boolean>(false);
+
   // Store wallet address before OAuth redirect to preserve it during linking
   const storeWalletBeforeLink = () => {
     if (addressForApi) {
@@ -430,6 +435,15 @@ function MyStatsContent() {
       } catch {
         // ignore
       }
+    }
+  };
+
+  // Save current session snapshot before linking a second provider so JWT callback can merge (persist all handles)
+  const saveSessionSnapshotBeforeLink = async () => {
+    try {
+      await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+    } catch {
+      // non-blocking; linking may still work if same session/cookie is used
     }
   };
 
@@ -486,6 +500,35 @@ function MyStatsContent() {
       }
     }
   }, [discordUsername]);
+
+  // Listen for OAuth popup completion (X/Twitter opens in popup to avoid full-page redirect reload loop)
+  useEffect(() => {
+    const onMessage = async (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.data?.type !== "auth-complete") return;
+      try {
+        const newSession = await updateSession();
+        const s = newSession as any;
+        // Sync all handles from refreshed session so UI and cache stay in sync (persisted state)
+        if (s?.twitterUsername) {
+          setCachedTwitter(s.twitterUsername);
+          try {
+            if (typeof window !== "undefined") window.localStorage.setItem("pp_twitter_username", s.twitterUsername);
+          } catch { /* ignore */ }
+        }
+        if (s?.discordUsername) {
+          setCachedDiscord(s.discordUsername);
+          try {
+            if (typeof window !== "undefined") window.localStorage.setItem("pp_discord_username", s.discordUsername);
+          } catch { /* ignore */ }
+        }
+        setRefetchUserAfterAuth(true);
+      } catch (err) {
+        console.error("[MyStats] auth-complete session update failed:", err);
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [updateSession]);
 
   // Persist last-known wallet address for display between redirects
   useEffect(() => {
@@ -855,11 +898,18 @@ function MyStatsContent() {
         });
         if (!cancelled && res.ok) {
           setDidSyncX(true);
-          // Restore wallet address if we used localStorage address
+          if (addressForApi) {
+            const allRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+            if (allRes.ok) {
+              const allData = await allRes.json() as UserAllResponse;
+              setApiUser(allData || null);
+            }
+            try {
+              if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+            } catch { /* ignore */ }
+          }
           if (!addressForApi && addr) {
-            window.dispatchEvent(new CustomEvent("setUserAddress", {
-              detail: addr,
-            }));
+            window.dispatchEvent(new CustomEvent("setUserAddress", { detail: addr }));
           }
         }
       } catch {
@@ -871,6 +921,25 @@ function MyStatsContent() {
       cancelled = true;
     };
   }, [addressForApi, effectiveTwitter, didSyncX]);
+
+  // After X auth popup completes: refetch user and invalidate social tasks so UI shows connected and tasks use new xHandle
+  useEffect(() => {
+    if (!refetchUserAfterAuth || !addressForApi) return;
+    const t = setTimeout(async () => {
+      setRefetchUserAfterAuth(false);
+      try {
+        const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json() as UserAllResponse;
+          setApiUser(data || null);
+        }
+        if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+      } catch {
+        // ignore
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [refetchUserAfterAuth, addressForApi]);
 
   useEffect(() => {
     let cancelled = false;
@@ -889,7 +958,19 @@ function MyStatsContent() {
         });
         if (!cancelled && res.ok) {
           setDidSyncDiscord(true);
-          // Restore wallet address if we used localStorage address
+          // Refetch user so isDiscordLinkedInApi becomes true and the Link button disappears
+          if (addressForApi) {
+            const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
+            const allRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+            if (allRes.ok) {
+              const allData = await allRes.json() as UserAllResponse;
+              setApiUser(allData || null);
+              setCachedJson(cacheKey, allData);
+            }
+            try {
+              if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+            } catch { /* ignore */ }
+          }
           if (!addressForApi && addr) {
             window.dispatchEvent(new CustomEvent("setUserAddress", {
               detail: addr,
@@ -1248,8 +1329,11 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
-                  onClick={() => {
+                  disabled={oauthClickAt.google != null && Date.now() - (oauthClickAt.google ?? 0) < 5000}
+                  onClick={async () => {
+                    setOauthClickAt((prev) => ({ ...prev, google: Date.now() }));
                     storeWalletBeforeLink();
+                    await saveSessionSnapshotBeforeLink();
                     signIn("google", { callbackUrl: "/" });
                   }}
                   style={{ cursor: "pointer" }}
@@ -1342,9 +1426,22 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
-                  onClick={() => {
+                  disabled={oauthClickAt.twitter != null && Date.now() - (oauthClickAt.twitter ?? 0) < 5000}
+                  onClick={async () => {
+                    setOauthClickAt((prev) => ({ ...prev, twitter: Date.now() }));
                     storeWalletBeforeLink();
-                    signIn("twitter", { callbackUrl: "/" });
+                    await saveSessionSnapshotBeforeLink();
+                    // Open Twitter OAuth in popup to avoid full-page redirect reload loop (causes rate limit)
+                    const res = await signIn("twitter", {
+                      redirect: false,
+                      callbackUrl: "/auth/complete?close=1",
+                    });
+                    if ((res as any)?.url) {
+                      window.open((res as any).url, "oauth-twitter", "width=560,height=640,scrollbars=yes");
+                    } else if ((res as any)?.error) {
+                      setOauthClickAt((prev) => ({ ...prev, twitter: undefined }));
+                      alert((res as any).error ?? "X sign-in failed. Try again in a few minutes.");
+                    }
                   }}
                   style={{ cursor: "pointer" }}
                   title="Link your X/Twitter account"
@@ -1434,8 +1531,11 @@ function MyStatsContent() {
                 <button
                   type="button"
                   className="pixel-chip pixel-chip--entry"
-                  onClick={() => {
+                  disabled={oauthClickAt.discord != null && Date.now() - (oauthClickAt.discord ?? 0) < 5000}
+                  onClick={async () => {
+                    setOauthClickAt((prev) => ({ ...prev, discord: Date.now() }));
                     storeWalletBeforeLink();
+                    await saveSessionSnapshotBeforeLink();
                     signIn("discord", { callbackUrl: "/" });
                   }}
                   style={{ cursor: "pointer" }}
@@ -1815,6 +1915,7 @@ function DailyContent() {
   const [dailyLoading, setDailyLoading] = useState<boolean>(false);
   const [weeklyLoading, setWeeklyLoading] = useState<boolean>(false);
   const [socialLoading, setSocialLoading] = useState<boolean>(false);
+  const [engagementLoading, setEngagementLoading] = useState<boolean>(false);
 
   type SocialTask = { id?: string; title: string; reward: number; done: boolean; canVerify?: boolean; xHandle?: string | null };
   const [socialTasks, setSocialTasks] = useState<SocialTask[]>([
@@ -2098,6 +2199,37 @@ function DailyContent() {
     };
   }, [walletAddress]);
 
+  // Prefetch engagement data when tab opens (if wallet connected)
+  useEffect(() => {
+    let abort = false;
+    if (!walletAddress) {
+      setEngagementLoading(false);
+      return;
+    }
+
+    async function prefetchEngagement() {
+      setEngagementLoading(true);
+      try {
+        const res = await fetch("/api/social/twitter/engagement-refresh", {
+          method: "POST",
+          cache: "no-store",
+        });
+        if (!res.ok && !abort) {
+          console.error("[DailyContent] Failed to prefetch engagement data");
+        }
+      } catch (error) {
+        console.error("[DailyContent] Error prefetching engagement:", error);
+      } finally {
+        if (!abort) setEngagementLoading(false);
+      }
+    }
+
+    prefetchEngagement();
+    return () => {
+      abort = true;
+    };
+  }, [walletAddress]);
+
   // Handle task verification and claiming
   const handleVerifyTask = async (taskId: string, xHandle: string | null | undefined) => {
     if (!walletAddress || !xHandle) {
@@ -2191,7 +2323,7 @@ function DailyContent() {
       </div>
 
       {/* Loading overlay */}
-      {(dailyLoading || weeklyLoading || socialLoading) && (
+      {(dailyLoading || weeklyLoading || socialLoading || engagementLoading) && (
         <div className="loading-overlay">
           <div className="loading-content">
             <div className="pixel-loading-spinner"></div>
@@ -2245,6 +2377,12 @@ function DailyContent() {
             <div>• Posts must include gameplay and/or physical Seeker footage showing Bakeland to be eligible</div>
           </div>
         </div>
+
+        {/* Tweet engagement verification - uses connected X account */}
+        <TweetVerificationPanel 
+          xHandle={socialTasks.find((t) => t.xHandle)?.xHandle ?? null}
+          isLoading={engagementLoading}
+        />
 
         {/* Daily Tasks */}
         <div className="tasks-section mt-6">

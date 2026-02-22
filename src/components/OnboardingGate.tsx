@@ -61,9 +61,12 @@ export default function OnboardingGate({ children }: Props) {
 	const [addressLookupKey, setAddressLookupKey] = useState<string | null>(null);
 	// True when we've confirmed a user record exists upstream via email/X/Discord.
 	const [hasUpstreamUser, setHasUpstreamUser] = useState(false);
+	// Throttle OAuth buttons to avoid multiple redirects (Twitter rate limit)
+	const [twitterOAuthClickAt, setTwitterOAuthClickAt] = useState<number | null>(null);
 
-	// Identify connect route (we'll branch in render, not before hooks)
+	// Identify routes that skip onboarding (show page directly)
 	const isConnectPage = pathname === "/connect";
+	const isXTestPage = pathname === "/x-test";
 
 	const effectiveAddress = gw.address || null;
 	const googleEmail: string | null = (session as any)?.googleEmail ?? null;
@@ -550,8 +553,8 @@ export default function OnboardingGate({ children }: Props) {
 		}
 	};
 
-	// If we're on the connect page, skip onboarding entirely
-	if (isConnectPage) {
+	// If we're on the connect or x-test page, skip onboarding entirely
+	if (isConnectPage || isXTestPage) {
 		return <>{children}</>;
 	}
 
@@ -610,7 +613,16 @@ export default function OnboardingGate({ children }: Props) {
 							{hasGoogle ? (
 								<PixelButton disabled>{effectiveGoogle}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("google", { callbackUrl: "/" })}>
+								<PixelButton
+									onClick={async () => {
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
+										signIn("google", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}
@@ -629,7 +641,18 @@ export default function OnboardingGate({ children }: Props) {
 							{hasX ? (
 								<PixelButton disabled>@{effectiveTwitter}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("twitter", { callbackUrl: "/" })}>
+								<PixelButton
+									disabled={twitterOAuthClickAt != null && Date.now() - twitterOAuthClickAt < 5000}
+									onClick={async () => {
+										setTwitterOAuthClickAt(Date.now());
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
+										signIn("twitter", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}
@@ -648,7 +671,16 @@ export default function OnboardingGate({ children }: Props) {
 							{hasDiscord ? (
 								<PixelButton disabled>{effectiveDiscord}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("discord", { callbackUrl: "/" })}>
+								<PixelButton
+									onClick={async () => {
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
+										signIn("discord", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}
