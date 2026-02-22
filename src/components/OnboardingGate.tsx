@@ -612,7 +612,16 @@ export default function OnboardingGate({ children }: Props) {
 							{hasGoogle ? (
 								<PixelButton disabled>{effectiveGoogle}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("google", { callbackUrl: "/" })}>
+								<PixelButton
+									onClick={async () => {
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
+										signIn("google", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}
@@ -633,8 +642,13 @@ export default function OnboardingGate({ children }: Props) {
 							) : (
 								<PixelButton
 									disabled={twitterOAuthClickAt != null && Date.now() - twitterOAuthClickAt < 5000}
-									onClick={() => {
+									onClick={async () => {
 										setTwitterOAuthClickAt(Date.now());
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
 										signIn("twitter", { callbackUrl: "/" });
 									}}
 								>
@@ -656,7 +670,16 @@ export default function OnboardingGate({ children }: Props) {
 							{hasDiscord ? (
 								<PixelButton disabled>{effectiveDiscord}</PixelButton>
 							) : (
-								<PixelButton onClick={() => signIn("discord", { callbackUrl: "/" })}>
+								<PixelButton
+									onClick={async () => {
+										try {
+											await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+										} catch {
+											// non-blocking
+										}
+										signIn("discord", { callbackUrl: "/" });
+									}}
+								>
 									Connect
 								</PixelButton>
 							)}

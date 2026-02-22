@@ -5,9 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 
 /**
- * Used when OAuth (e.g. Twitter) completes in a popup.
- * Closes the popup and notifies the opener so the main page can refresh the session.
- * Prevents full-page redirect loops that cause Twitter's auth page to reload and trigger rate limits.
+ * Used when OAuth (e.g. X/Twitter) completes in a popup.
+ * Notifies the opener so the main app can refresh the session, then focuses the opener and tries to close this window.
  */
 function AuthCompleteContent() {
   const searchParams = useSearchParams();
@@ -18,15 +17,25 @@ function AuthCompleteContent() {
     const isOpener = typeof window !== "undefined" && window.opener != null;
     if (isOpener) {
       window.opener.postMessage({ type: "auth-complete" }, window.location.origin);
+      try {
+        window.opener.focus();
+      } catch {
+        // ignore cross-origin or focus errors
+      }
       window.close();
     }
   }, [close]);
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4 text-center">
-      <p className="text-zinc-400">
-        You can close this window. If it does not close automatically, close it manually.
-      </p>
+      <div className="max-w-sm space-y-2">
+        <p className="text-zinc-200 font-medium">
+          You’re all set.
+        </p>
+        <p className="text-zinc-400 text-sm">
+          Return to the main app window — it should update automatically. You can close this tab or window if it doesn’t close by itself.
+        </p>
+      </div>
     </div>
   );
 }

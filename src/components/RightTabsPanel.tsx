@@ -423,7 +423,8 @@ function MyStatsContent() {
   const [didSyncX, setDidSyncX] = useState<boolean>(false);
   const [didSyncDiscord, setDidSyncDiscord] = useState<boolean>(false);
   const [didSyncGoogle, setDidSyncGoogle] = useState<boolean>(false);
-  
+  const [refetchUserAfterAuth, setRefetchUserAfterAuth] = useState<boolean>(false);
+
   // Store wallet address before OAuth redirect to preserve it during linking
   const storeWalletBeforeLink = () => {
     if (addressForApi) {
@@ -434,6 +435,15 @@ function MyStatsContent() {
       } catch {
         // ignore
       }
+    }
+  };
+
+  // Save current session snapshot before linking a second provider so JWT callback can merge (persist all handles)
+  const saveSessionSnapshotBeforeLink = async () => {
+    try {
+      await fetch("/api/auth/save-session-snapshot", { method: "POST", credentials: "include" });
+    } catch {
+      // non-blocking; linking may still work if same session/cookie is used
     }
   };
 
@@ -491,11 +501,30 @@ function MyStatsContent() {
     }
   }, [discordUsername]);
 
-  // Listen for OAuth popup completion (Twitter opens in popup to avoid full-page redirect reload loop)
+  // Listen for OAuth popup completion (X/Twitter opens in popup to avoid full-page redirect reload loop)
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
+    const onMessage = async (e: MessageEvent) => {
       if (e.origin !== window.location.origin || e.data?.type !== "auth-complete") return;
-      updateSession();
+      try {
+        const newSession = await updateSession();
+        const s = newSession as any;
+        // Sync all handles from refreshed session so UI and cache stay in sync (persisted state)
+        if (s?.twitterUsername) {
+          setCachedTwitter(s.twitterUsername);
+          try {
+            if (typeof window !== "undefined") window.localStorage.setItem("pp_twitter_username", s.twitterUsername);
+          } catch { /* ignore */ }
+        }
+        if (s?.discordUsername) {
+          setCachedDiscord(s.discordUsername);
+          try {
+            if (typeof window !== "undefined") window.localStorage.setItem("pp_discord_username", s.discordUsername);
+          } catch { /* ignore */ }
+        }
+        setRefetchUserAfterAuth(true);
+      } catch (err) {
+        console.error("[MyStats] auth-complete session update failed:", err);
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -869,11 +898,18 @@ function MyStatsContent() {
         });
         if (!cancelled && res.ok) {
           setDidSyncX(true);
-          // Restore wallet address if we used localStorage address
+          if (addressForApi) {
+            const allRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+            if (allRes.ok) {
+              const allData = await allRes.json() as UserAllResponse;
+              setApiUser(allData || null);
+            }
+            try {
+              if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+            } catch { /* ignore */ }
+          }
           if (!addressForApi && addr) {
-            window.dispatchEvent(new CustomEvent("setUserAddress", {
-              detail: addr,
-            }));
+            window.dispatchEvent(new CustomEvent("setUserAddress", { detail: addr }));
           }
         }
       } catch {
@@ -885,6 +921,25 @@ function MyStatsContent() {
       cancelled = true;
     };
   }, [addressForApi, effectiveTwitter, didSyncX]);
+
+  // After X auth popup completes: refetch user and invalidate social tasks so UI shows connected and tasks use new xHandle
+  useEffect(() => {
+    if (!refetchUserAfterAuth || !addressForApi) return;
+    const t = setTimeout(async () => {
+      setRefetchUserAfterAuth(false);
+      try {
+        const res = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json() as UserAllResponse;
+          setApiUser(data || null);
+        }
+        if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+      } catch {
+        // ignore
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [refetchUserAfterAuth, addressForApi]);
 
   useEffect(() => {
     let cancelled = false;
@@ -903,7 +958,19 @@ function MyStatsContent() {
         });
         if (!cancelled && res.ok) {
           setDidSyncDiscord(true);
-          // Restore wallet address if we used localStorage address
+          // Refetch user so isDiscordLinkedInApi becomes true and the Link button disappears
+          if (addressForApi) {
+            const cacheKey = `pp_tab_cache_mystats_all_${addressForApi}`;
+            const allRes = await fetch(`/api/user/${encodeURIComponent(addressForApi)}/all`, { cache: "no-store" });
+            if (allRes.ok) {
+              const allData = await allRes.json() as UserAllResponse;
+              setApiUser(allData || null);
+              setCachedJson(cacheKey, allData);
+            }
+            try {
+              if (typeof window !== "undefined") window.sessionStorage.removeItem(`pp_tab_cache_social_tasks_${addressForApi}`);
+            } catch { /* ignore */ }
+          }
           if (!addressForApi && addr) {
             window.dispatchEvent(new CustomEvent("setUserAddress", {
               detail: addr,
@@ -1263,9 +1330,10 @@ function MyStatsContent() {
                   type="button"
                   className="pixel-chip pixel-chip--entry"
                   disabled={oauthClickAt.google != null && Date.now() - (oauthClickAt.google ?? 0) < 5000}
-                  onClick={() => {
+                  onClick={async () => {
                     setOauthClickAt((prev) => ({ ...prev, google: Date.now() }));
                     storeWalletBeforeLink();
+                    await saveSessionSnapshotBeforeLink();
                     signIn("google", { callbackUrl: "/" });
                   }}
                   style={{ cursor: "pointer" }}
@@ -1362,6 +1430,7 @@ function MyStatsContent() {
                   onClick={async () => {
                     setOauthClickAt((prev) => ({ ...prev, twitter: Date.now() }));
                     storeWalletBeforeLink();
+                    await saveSessionSnapshotBeforeLink();
                     // Open Twitter OAuth in popup to avoid full-page redirect reload loop (causes rate limit)
                     const res = await signIn("twitter", {
                       redirect: false,
@@ -1463,9 +1532,10 @@ function MyStatsContent() {
                   type="button"
                   className="pixel-chip pixel-chip--entry"
                   disabled={oauthClickAt.discord != null && Date.now() - (oauthClickAt.discord ?? 0) < 5000}
-                  onClick={() => {
+                  onClick={async () => {
                     setOauthClickAt((prev) => ({ ...prev, discord: Date.now() }));
                     storeWalletBeforeLink();
+                    await saveSessionSnapshotBeforeLink();
                     signIn("discord", { callbackUrl: "/" });
                   }}
                   style={{ cursor: "pointer" }}
