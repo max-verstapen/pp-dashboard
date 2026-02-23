@@ -1,15 +1,25 @@
 export type TweetToVerify = {
   id: string;
   label?: string;
+  /** Quest ID for comment verification (prevents re-verification, used with quest API) */
+  commentQuestId: string;
+  /** Quest ID for quote verification (prevents re-verification, used with quest API) */
+  quoteQuestId: string;
 };
 
-/**
- * Tweets shown in the "Verify post engagement" panel.
- *
- * Add new tweets to the END of this array — the UI renders last-to-first
- * so newly added tweets appear at the top.
- */
+
 export const TWEETS_TO_VERIFY: TweetToVerify[] = [
-  { id: "2019081859167371556", label: "Seeker token payment" },
+  {
+    id: "2019081859167371556",
+    label: "Seeker token support",
+    commentQuestId: "11",
+    quoteQuestId: "12",
+  },
+  {
+    id: "209197839",
+    label: "Article",
+    commentQuestId: "13",
+    quoteQuestId: "14",
+  },
 ];
 
