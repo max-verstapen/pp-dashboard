@@ -2381,6 +2381,7 @@ function DailyContent() {
         {/* Tweet engagement verification - uses connected X account */}
         <TweetVerificationPanel 
           xHandle={socialTasks.find((t) => t.xHandle)?.xHandle ?? null}
+          address={walletAddress}
           isLoading={engagementLoading}
         />
 

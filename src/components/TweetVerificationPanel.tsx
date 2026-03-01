@@ -18,6 +18,8 @@ type EngagementStatus = {
 
 type TweetVerificationPanelProps = {
   xHandle: string | null | undefined;
+  /** Wallet address for crediting PP on verification */
+  address?: string | null;
   tweets?: TweetToVerify[] | null;
   isLoading?: boolean;
 };
@@ -26,7 +28,7 @@ function getTweetUrl(tweetId: string): string {
   return `https://twitter.com/i/status/${tweetId}`;
 }
 
-export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, isLoading = false }: TweetVerificationPanelProps) {
+export default function TweetVerificationPanel({ xHandle, address, tweets: tweetsProp, isLoading = false }: TweetVerificationPanelProps) {
   const tweets = useMemo(() => {
     const source = tweetsProp != null && tweetsProp.length > 0 ? tweetsProp : TWEETS_TO_VERIFY;
     // Display last-to-first so newly added items appear on top.
@@ -66,6 +68,39 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
     const interval = setInterval(fetchStatus, 30 * 1000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
+
+  // Load initial verified state from quest completion when address is available
+  useEffect(() => {
+    if (!address?.trim()) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/social/twitter/engagement-verified-status?address=${encodeURIComponent(address)}`,
+          { cache: "no-store" }
+        );
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          const s = data?.status || {};
+          setVerified((prev) => {
+            const next = { ...prev };
+            for (const [tweetId, v] of Object.entries(s)) {
+              const vv = v as { comment?: boolean; quote?: boolean };
+              if (vv.comment || vv.quote) {
+                next[tweetId] = { ...(next[tweetId] || {}), ...vv };
+              }
+            }
+            return next;
+          });
+        }
+      } catch (e) {
+        console.error("[TweetVerificationPanel] Failed to load verified status:", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   // When xHandle is available, trigger engagement refresh once so data is loaded
   useEffect(() => {
@@ -152,6 +187,7 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
           xHandle: xHandle.replace(/^@/, "").trim(),
           tweetId,
           action,
+          address: address || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -160,6 +196,11 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
           ...prev,
           [tweetId]: { ...(prev[tweetId] || {}), [action]: true },
         }));
+        if (data.pointsEarned != null && data.pointsEarned > 0) {
+          alert(`Verified! +${data.pointsEarned} PP credited.`);
+        } else if (data.alreadyCompleted) {
+          // Already verified before - no PP, but show as verified
+        }
       } else {
         alert(data.error || "Verification failed. You may not have commented/quoted this post yet.");
       }
@@ -181,7 +222,7 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
           </span>
         )}
       </div>
-      <p className="text-sm text-zinc-400 mb-3">
+      <p className="task-notes mb-3">
         Confirm you have commented on or quoted the posts below using your connected X account.
       </p>
       <div className="tasks-list space-y-4">
@@ -192,16 +233,15 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
                 href={getTweetUrl(tweet.id)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[#cbf99f] hover:underline font-medium"
+                className="task-title text-[#cbf99f] hover:underline"
               >
                 {tweet.label || `Post ${tweet.id}`}
               </a>
-              <span className="text-zinc-500 text-xs">({tweet.id})</span>
               <a
                 href={getTweetUrl(tweet.id)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-zinc-400 hover:text-zinc-300"
+                className="text-sm text-zinc-400 underline hover:text-zinc-300"
               >
                 Open on X →
               </a>
@@ -214,7 +254,7 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
                   disabled={isLoading || refreshingEngagement || isVerified(tweet.id, "comment")}
                   className="px-3 py-1.5 text-xs rounded font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-sky-600/80 hover:bg-sky-600 text-white border border-sky-500/50"
                 >
-                  {isVerified(tweet.id, "comment") ? "✓ Commented" : refreshingEngagement ? "Loading…" : "Verify Comment"}
+                  {isVerified(tweet.id, "comment") ? "✓ Commented (+100 PP)" : refreshingEngagement ? "Loading…" : "Verify Comment (+100 PP)"}
                 </button>
                 <button
                   type="button"
@@ -222,7 +262,7 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
                   disabled={isLoading || refreshingEngagement || isVerified(tweet.id, "quote")}
                   className="px-3 py-1.5 text-xs rounded font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-emerald-600/80 hover:bg-emerald-600 text-white border border-emerald-500/50"
                 >
-                  {isVerified(tweet.id, "quote") ? "✓ Quoted" : refreshingEngagement ? "Loading…" : "Verify Quote"}
+                  {isVerified(tweet.id, "quote") ? "✓ Quoted (+250 PP)" : refreshingEngagement ? "Loading…" : "Verify Quote (+250 PP)"}
                 </button>
               </div>
             </div>
@@ -231,6 +271,9 @@ export default function TweetVerificationPanel({ xHandle, tweets: tweetsProp, is
       </div>
       {!xHandle?.trim() && (
         <p className="text-xs text-amber-400/90 mt-2">Connect your X account in My Stats to verify engagement.</p>
+      )}
+      {xHandle?.trim() && !address?.trim() && (
+        <p className="text-xs text-amber-400/90 mt-2">Connect your wallet to receive PP (100 for comment, 250 for quote) on verification.</p>
       )}
     </div>
   );
