@@ -10,16 +10,10 @@ export type TweetToVerify = {
 
 export const TWEETS_TO_VERIFY: TweetToVerify[] = [
   {
-    id: "2019081859167371556",
-    label: "Seeker token support",
-    commentQuestId: "11",
-    quoteQuestId: "12",
-  },
-  {
-    id: "209197839",
-    label: "Article",
-    commentQuestId: "13",
-    quoteQuestId: "14",
+    id: "2027808435841208795",
+    label: "crypto [as] an mmorpg",
+    commentQuestId: "15",
+    quoteQuestId: "16",
   },
 ];
 
